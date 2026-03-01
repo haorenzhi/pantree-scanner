@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 
 const STORAGE_KEY = 'pantree-foods';
 const STORAGE_EVENT = 'pantree-storage';
-const BRIDGE_URL = process.env.REACT_APP_BRIDGE_URL || 'http://localhost:3001';
+const BRIDGE_URL = `${window.location.protocol}//${window.location.hostname}:4000`;
 const POLL_INTERVAL = 2000; // ms
 
 const localUser = { uid: 'local', email: 'local user' };

@@ -65,8 +65,9 @@ node_modules/
 # dotenv environment variables file
 .env
 
-# Tesseract OCR language data (downloaded at runtime)
-bridge-server/lang-data/
+# Tesseract uncompressed language data (decompressed at runtime from .gz)
+bridge-server/lang-data/*.traineddata
+*.traineddata
 
 # Bridge server runtime data
 bridge-server/pantree-data.json

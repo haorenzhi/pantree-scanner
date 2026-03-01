@@ -6,7 +6,7 @@ const multer = require('multer');
 const Tesseract = require('tesseract.js');
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 4000;
 const DATA_FILE = path.join(__dirname, 'pantree-data.json');
 
 app.use(cors());
@@ -500,7 +500,7 @@ app.get('/scan', (req, res) => {
     <div class="icon">📷</div>
     <p>Tap to take a photo or choose an image</p>
   </div>
-  <input type="file" id="fileInput" accept="image/*" capture="environment">
+  <input type="file" id="fileInput" accept="image/*">
   <img class="preview" id="preview">
   <button class="btn" id="scanBtn" disabled>Scan Receipt</button>
   <div class="status" id="status"></div>
