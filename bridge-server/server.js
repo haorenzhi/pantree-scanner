@@ -71,6 +71,13 @@ const FOOD_EMOJIS = {
   guacamole: '🥑', sandwich: '🥪', burrito: '🌯',
   cheesecake: '🍰',
   cilantro: '🌿', chives: '🌿', ginger: '🫚',
+  grapefruit: '🍊', oranges: '🍊', orange: '🍊', watermelon: '🍉',
+  pineapple: '🍍', coconut: '🥥', plums: '🍑', cherries: '🍒',
+  romaine: '🥬', kale: '🥬', arugula: '🥬', cabbage: '🥬',
+  'sweet potato': '🍠', zucchini: '🥒', 'green beans': '🫘',
+  hummus: '🫙', tortillas: '🫓', pasta: '🍝', flour: '🌾',
+  sugar: '🍬', honey: '🍯', 'peanut butter': '🥜', jam: '🫙',
+  'almond milk': '🥛', 'oat milk': '🥛', cream: '🥛', deli: '🥩',
 };
 
 function resolveEmoji(name) {
@@ -96,15 +103,22 @@ const RECEIPT_ABBREVIATIONS = {
 };
 
 const NON_FOOD_PATTERNS = [
-  /\b(TOTAL|SUBTOTAL|SUB\s*TOTAL)\b/i,
+  /\b(TOTAL|SUBTOTAL|SUB\s*TOTAL|NET\s*SALES)\b/i,
   /\b(TAX|SALES\s*TAX|HST|GST|PST)\b/i,
-  /\b(CHANGE|CASH|CREDIT|DEBIT|TENDER|PAYMENT)\b/i,
+  /\b(CHANGE|CASH|CREDIT|DEBIT|TENDER|PAYMENT|PAID|BALANCE)\b/i,
   /\b(VISA|MASTERCARD|AMEX|DISCOVER|INTERAC)\b/i,
   /\b(THANK\s*YOU|WELCOME|COME\s*AGAIN|HAVE\s*A)\b/i,
   /\b(STORE|RECEIPT|TRANSACTION|CASHIER|REG)\b/i,
   /\b(MEMBER|LOYALTY|REWARDS|SAVINGS|DISCOUNT|COUPON)\b/i,
   /\b(REFUND|RETURN|VOID|CANCEL)\b/i,
   /\b(TEL|FAX|PHONE|WWW\.|HTTP|\.COM|\.CA)\b/i,
+  /\b(DEPOSIT|BOTTLE\s*DEP)\b/i,                    // bottle deposits
+  /\b(SOLD\s*ITEMS|ITEMS?\s*SOLD)\b/i,              // item count lines
+  /\b(MID|TID|MERCH|TERMINAL|AUTH|APPROVAL)\b/i,    // transaction IDs
+  /\b(MARKET|FOODS?|GROCERY|GROCER|SUPERMARKET)\b/i, // store name words
+  /\b(AVE|BLVD|ST|RD|DR|SUITE|FLOOR)\b/i,           // street addresses
+  /\b(NY|NJ|CA|TX|FL|CT|PA)\s*\d{4,}/i,             // state + zip
+  /\b(PAPER\s*TOWEL|NAPKIN|TISSUE|TRASH\s*BAG|DETERGENT|SOAP|CLEANER|SPONGE)\b/i, // non-food products
   /^\d{6,}$/,           // barcode numbers
   /^\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4}/, // dates
   /^\d{1,2}:\d{2}/,     // times
@@ -113,7 +127,9 @@ const NON_FOOD_PATTERNS = [
   /^\s*\*{3,}/,         // asterisk separators
 ];
 
+// Price extraction: try 2+ space gap first, then fall back to inline $X.XX
 const ITEM_PRICE_RE = /^(.+?)\s{2,}\$?(\d+\.\d{2})\s*[A-Z]?\s*$/;
+const INLINE_PRICE_RE = /^(.+?)\s+\$(\d+\.\d{2})\s*[A-Z]{0,2}\s*$/;
 const QTY_PREFIX_RE = /^\s*\d+\s*[x@]\s*/i;
 const WEIGHT_LINE_RE = /^\s*\d+\.?\d*\s*(kg|lb|g|oz)\b/i;
 
@@ -178,7 +194,19 @@ function matchFood(name) {
   }
   if (bestSub && bestLen >= 3) return bestSub;
 
-  // 3. Levenshtein fuzzy match (~30% tolerance)
+  // 3. Word-level match — try each word in the name individually
+  //    Catches "Lacrx Grapefruit 12pk" → word "grapefruit" matches key "grapefruit"
+  const words = lower.split(/\s+/).filter(w => w.length >= 3);
+  for (const word of words) {
+    // Exact word match against a key
+    if (FRIDGE_EXPIRY[word] !== undefined) return word;
+    // Word is substring of a key or key is substring of word
+    for (const key of keys) {
+      if ((word.includes(key) || key.includes(word)) && key.length >= 3) return key;
+    }
+  }
+
+  // 4. Levenshtein fuzzy match on full name (~30% tolerance)
   let bestMatch = null;
   let bestDist = Infinity;
   for (const key of keys) {
@@ -187,6 +215,19 @@ function matchFood(name) {
     if (dist < bestDist && dist <= maxLen * 0.3) {
       bestDist = dist;
       bestMatch = key;
+    }
+  }
+  if (bestMatch) return bestMatch;
+
+  // 5. Levenshtein fuzzy match on individual words (~30% tolerance)
+  for (const word of words) {
+    for (const key of keys) {
+      const dist = levenshtein(word, key);
+      const maxLen = Math.max(word.length, key.length);
+      if (dist < bestDist && dist <= maxLen * 0.3) {
+        bestDist = dist;
+        bestMatch = key;
+      }
     }
   }
   return bestMatch; // null if nothing matched
@@ -212,7 +253,8 @@ function parseReceipt(rawText) {
     let name = null;
     let price = null;
 
-    const priceMatch = ITEM_PRICE_RE.exec(stripped);
+    // Try 2+ space gap pattern first, then inline $X.XX pattern
+    const priceMatch = ITEM_PRICE_RE.exec(stripped) || INLINE_PRICE_RE.exec(stripped);
     if (priceMatch) {
       name = priceMatch[1];
       price = parseFloat(priceMatch[2]) || null;
@@ -231,14 +273,11 @@ function parseReceipt(rawText) {
     if (seen.has(key)) continue;
     seen.add(key);
 
-    // Fuzzy match against FRIDGE_EXPIRY
+    // Fuzzy match against FRIDGE_EXPIRY — only keep recognized food items
     const matched = matchFood(name);
     if (matched) {
-      // Use canonical name (title case)
       const canonical = matched.replace(/\b\w/g, c => c.toUpperCase());
       items.push({ name: canonical, price, section: 'fridge', exp_days: FRIDGE_EXPIRY[matched] });
-    } else {
-      items.push({ name, price, section: 'fridge', exp_days: 7 });
     }
   }
 
@@ -341,6 +380,13 @@ const FRIDGE_EXPIRY = {
   guacamole: 4, sandwich: 4, burrito: 4, bread: 7, bagels: 14,
   pancakes: 4, waffles: 4, tempeh: 14, cheesecake: 7,
   beans: 365, cereal: 365, coffee: 14, 'chocolate syrup': 365,
+  grapefruit: 21, oranges: 14, orange: 14, watermelon: 7,
+  pineapple: 5, coconut: 7, plums: 5, cherries: 7,
+  romaine: 5, kale: 5, arugula: 3, cabbage: 14,
+  'sweet potato': 14, zucchini: 5, 'green beans': 5,
+  hummus: 7, tortillas: 14, pasta: 365, flour: 365,
+  sugar: 730, honey: 730, 'peanut butter': 90, jam: 365,
+  'almond milk': 7, 'oat milk': 7, cream: 14, deli: 5,
 };
 
 function lookupFridgeExpiry(name) {
@@ -432,6 +478,7 @@ app.post('/api/scan', upload.single('receipt'), async (req, res) => {
         id,
         name: item.name,
         icon: resolveEmoji(item.name),
+        price: item.price,
         buyDate: today,
         expDate,
         section: item.section,
