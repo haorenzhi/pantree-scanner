@@ -57,12 +57,12 @@ export const ItemCard = styled.div`
     display: grid;
     width: 100%;
     max-width: 18%;
-    min-width: 280px;
+    min-width: 320px;
     height: 160px;
     box-shadow: 4px 4px 10px 5px rgba(57, 57, 57, 0.1);
     border-radius: 15px;
     margin-bottom: 27px;
-    grid-template-columns: 38% 42% 20%;
+    grid-template-columns: 30% 50% 20%;
     grid-template-rows: 60% 15% 25%;
     grid-template-areas: 
         'txt item-name delete'

@@ -5,6 +5,9 @@ const path = require('path');
 const multer = require('multer');
 const Tesseract = require('tesseract.js');
 
+const { resolveEmoji, lookupExpiry, lookupSection } = require('./food-db');
+const { parseReceipt } = require('./receipt-parser');
+
 const app = express();
 const PORT = process.env.PORT || 4000;
 const DATA_FILE = path.join(__dirname, 'pantree-data.json');
@@ -32,258 +35,6 @@ function writeData(data) {
   fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
 }
 
-// Emoji lookup — simple mapping of common food names to emojis
-const FOOD_EMOJIS = {
-  apples: '🍎', apple: '🍎', bananas: '🍌', banana: '🍌',
-  blueberries: '🫐', strawberries: '🍓', grapes: '🍇',
-  raspberries: '🍓', peaches: '🍑', pears: '🍐',
-  lemon: '🍋', lime: '🍋', melons: '🍈', kiwi: '🥝',
-  avocados: '🥑', avocado: '🥑', mangos: '🥭', mango: '🥭',
-  papaya: '🥭', nectarines: '🍑', cherries: '🍒',
-  broccoli: '🥦', carrots: '🥕', corn: '🌽',
-  lettuce: '🥬', spinach: '🥬', tomatoes: '🍅', tomato: '🍅',
-  potatoes: '🥔', potato: '🥔', onions: '🧅', onion: '🧅',
-  garlic: '🧄', peppers: '🌶️', mushrooms: '🍄',
-  cucumbers: '🥒', eggplant: '🍆', cauliflower: '🥦',
-  celery: '🥬', asparagus: '🥬', squash: '🥒',
-  'bok choy': '🥬', 'brussel sprouts': '🥬', okra: '🥬',
-  radishes: '🥬', beets: '🥬', artichokes: '🥬',
-  chicken: '🍗', 'fried chicken': '🍗', turkey: '🦃',
-  steak: '🥩', 'ground beef': '🥩', bacon: '🥓',
-  pork: '🥩', 'ground pork': '🥩', 'ground turkey': '🥩',
-  ham: '🍖', sausage: '🌭', 'lamb chop': '🥩',
-  salmon: '🐟', tilapia: '🐟', bass: '🐟',
-  shrimp: '🦐', lobster: '🦞', crab: '🦀',
-  scallops: '🐚', squid: '🦑', mussels: '🐚',
-  oysters: '🦪', shellfish: '🐚',
-  milk: '🥛', eggs: '🥚', egg: '🥚', butter: '🧈',
-  cheese: '🧀', 'cream cheese': '🧀', 'cottage cheese': '🧀',
-  'ricotta cheese': '🧀', yogurt: '🥛', 'sour cream': '🥛',
-  'heavy cream': '🥛', 'half-and-half': '🥛',
-  bread: '🍞', bagels: '🥯', pancakes: '🥞', waffles: '🧇',
-  rice: '🍚', beans: '🫘', cereal: '🥣', coffee: '☕',
-  juice: '🧃', 'orange juice': '🍊', 'apple juice': '🧃',
-  'mango juice': '🧃',
-  ketchup: '🍅', mustard: '🟡', mayonnaise: '🥫',
-  salsa: '🫙', 'soy sauce': '🫙', vinegar: '🫙',
-  'olive oil': '🫒', 'maple syrup': '🍁', 'chocolate syrup': '🍫',
-  tofu: '🥡', tempeh: '🥡', miso: '🥣',
-  guacamole: '🥑', sandwich: '🥪', burrito: '🌯',
-  cheesecake: '🍰',
-  cilantro: '🌿', chives: '🌿', ginger: '🫚',
-  grapefruit: '🍊', oranges: '🍊', orange: '🍊', watermelon: '🍉',
-  pineapple: '🍍', coconut: '🥥', plums: '🍑', cherries: '🍒',
-  romaine: '🥬', kale: '🥬', arugula: '🥬', cabbage: '🥬',
-  'sweet potato': '🍠', zucchini: '🥒', 'green beans': '🫘',
-  hummus: '🫙', tortillas: '🫓', pasta: '🍝', flour: '🌾',
-  sugar: '🍬', honey: '🍯', 'peanut butter': '🥜', jam: '🫙',
-  'almond milk': '🥛', 'oat milk': '🥛', cream: '🥛', deli: '🥩',
-};
-
-function resolveEmoji(name) {
-  const lower = name.toLowerCase();
-  if (FOOD_EMOJIS[lower]) return FOOD_EMOJIS[lower];
-  // Partial match
-  for (const [key, emoji] of Object.entries(FOOD_EMOJIS)) {
-    if (lower.includes(key) || key.includes(lower)) return emoji;
-  }
-  return '🍽️';
-}
-
-// --- Receipt Parser (ported from receipt-scanner/parser.py) ---
-
-const RECEIPT_ABBREVIATIONS = {
-  ORG: 'Organic', GRN: 'Green', BNL: 'Boneless', BNLS: 'Boneless',
-  CHKN: 'Chicken', BRST: 'Breast', GRD: 'Ground', GRND: 'Ground',
-  BF: 'Beef', VEG: 'Vegetable', FRZ: 'Frozen', FRSH: 'Fresh',
-  WHL: 'Whole', LG: 'Large', SM: 'Small', MED: 'Medium',
-  PKG: 'Package', BNDL: 'Bundle', YLW: 'Yellow', RED: 'Red',
-  WHT: 'White', BLK: 'Black', CRSP: 'Crisp', SWT: 'Sweet',
-  LB: '', OZ: '', CT: '', EA: '', PK: '',
-};
-
-const NON_FOOD_PATTERNS = [
-  /\b(TOTAL|SUBTOTAL|SUB\s*TOTAL|NET\s*SALES)\b/i,
-  /\b(TAX|SALES\s*TAX|HST|GST|PST)\b/i,
-  /\b(CHANGE|CASH|CREDIT|DEBIT|TENDER|PAYMENT|PAID|BALANCE)\b/i,
-  /\b(VISA|MASTERCARD|AMEX|DISCOVER|INTERAC)\b/i,
-  /\b(THANK\s*YOU|WELCOME|COME\s*AGAIN|HAVE\s*A)\b/i,
-  /\b(STORE|RECEIPT|TRANSACTION|CASHIER|REG)\b/i,
-  /\b(MEMBER|LOYALTY|REWARDS|SAVINGS|DISCOUNT|COUPON)\b/i,
-  /\b(REFUND|RETURN|VOID|CANCEL)\b/i,
-  /\b(TEL|FAX|PHONE|WWW\.|HTTP|\.COM|\.CA)\b/i,
-  /\b(DEPOSIT|BOTTLE\s*DEP)\b/i,                    // bottle deposits
-  /\b(SOLD\s*ITEMS|ITEMS?\s*SOLD)\b/i,              // item count lines
-  /\b(MID|TID|MERCH|TERMINAL|AUTH|APPROVAL)\b/i,    // transaction IDs
-  /\b(MARKET|FOODS?|GROCERY|GROCER|SUPERMARKET)\b/i, // store name words
-  /\b(AVE|BLVD|ST|RD|DR|SUITE|FLOOR)\b/i,           // street addresses
-  /\b(NY|NJ|CA|TX|FL|CT|PA)\s*\d{4,}/i,             // state + zip
-  /\b(PAPER\s*TOWEL|NAPKIN|TISSUE|TRASH\s*BAG|DETERGENT|SOAP|CLEANER|SPONGE)\b/i, // non-food products
-  /^\d{6,}$/,           // barcode numbers
-  /^\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4}/, // dates
-  /^\d{1,2}:\d{2}/,     // times
-  /^[#*]/,              // metadata lines
-  /^[\-=_]{3,}$/,       // separator lines
-  /^\s*\*{3,}/,         // asterisk separators
-];
-
-// Price extraction: try 2+ space gap first, then fall back to inline $X.XX
-const ITEM_PRICE_RE = /^(.+?)\s{2,}\$?(\d+\.\d{2})\s*[A-Z]?\s*$/;
-const INLINE_PRICE_RE = /^(.+?)\s+\$(\d+\.\d{2})\s*[A-Z]{0,2}\s*$/;
-const QTY_PREFIX_RE = /^\s*\d+\s*[x@]\s*/i;
-const WEIGHT_LINE_RE = /^\s*\d+\.?\d*\s*(kg|lb|g|oz)\b/i;
-
-function normalizeName(raw) {
-  let name = raw.trim();
-  // Remove quantity prefixes
-  name = name.replace(QTY_PREFIX_RE, '');
-  // Expand abbreviations
-  const words = name.split(/\s+/);
-  const expanded = [];
-  for (const word of words) {
-    const upper = word.toUpperCase().replace(/[.,;:]/g, '');
-    if (upper in RECEIPT_ABBREVIATIONS) {
-      const replacement = RECEIPT_ABBREVIATIONS[upper];
-      if (replacement) expanded.push(replacement);
-    } else {
-      expanded.push(word);
-    }
-  }
-  name = expanded.join(' ');
-  // Title case
-  name = name.replace(/\w\S*/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
-  // Strip leading/trailing punctuation
-  name = name.replace(/^[.,;:\-*#]+|[.,;:\-*#]+$/g, '');
-  return name.trim();
-}
-
-function levenshtein(a, b) {
-  if (a.length < b.length) return levenshtein(b, a);
-  if (b.length === 0) return a.length;
-  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
-  for (let i = 0; i < a.length; i++) {
-    const curr = [i + 1];
-    for (let j = 0; j < b.length; j++) {
-      const ins = prev[j + 1] + 1;
-      const del = curr[j] + 1;
-      const sub = prev[j] + (a[i] !== b[j] ? 1 : 0);
-      curr.push(Math.min(ins, del, sub));
-    }
-    prev = curr;
-  }
-  return prev[prev.length - 1];
-}
-
-function matchFood(name) {
-  const lower = name.toLowerCase();
-  const keys = Object.keys(FRIDGE_EXPIRY);
-
-  // 1. Exact match
-  for (const key of keys) {
-    if (key === lower) return key;
-  }
-
-  // 2. Substring match — longest matching key wins
-  let bestSub = null;
-  let bestLen = 0;
-  for (const key of keys) {
-    if (lower.includes(key) && key.length > bestLen) {
-      bestSub = key;
-      bestLen = key.length;
-    }
-  }
-  if (bestSub && bestLen >= 3) return bestSub;
-
-  // 3. Word-level match — try each word in the name individually
-  //    Catches "Lacrx Grapefruit 12pk" → word "grapefruit" matches key "grapefruit"
-  const words = lower.split(/\s+/).filter(w => w.length >= 3);
-  for (const word of words) {
-    // Exact word match against a key
-    if (FRIDGE_EXPIRY[word] !== undefined) return word;
-    // Word is substring of a key or key is substring of word
-    for (const key of keys) {
-      if ((word.includes(key) || key.includes(word)) && key.length >= 3) return key;
-    }
-  }
-
-  // 4. Levenshtein fuzzy match on full name (~30% tolerance)
-  let bestMatch = null;
-  let bestDist = Infinity;
-  for (const key of keys) {
-    const dist = levenshtein(lower, key);
-    const maxLen = Math.max(lower.length, key.length);
-    if (dist < bestDist && dist <= maxLen * 0.3) {
-      bestDist = dist;
-      bestMatch = key;
-    }
-  }
-  if (bestMatch) return bestMatch;
-
-  // 5. Levenshtein fuzzy match on individual words (~30% tolerance)
-  for (const word of words) {
-    for (const key of keys) {
-      const dist = levenshtein(word, key);
-      const maxLen = Math.max(word.length, key.length);
-      if (dist < bestDist && dist <= maxLen * 0.3) {
-        bestDist = dist;
-        bestMatch = key;
-      }
-    }
-  }
-  return bestMatch; // null if nothing matched
-}
-
-function parseReceipt(rawText) {
-  const lines = rawText.split('\n');
-  const items = [];
-  const seen = new Set();
-
-  for (const line of lines) {
-    const stripped = line.trim();
-    if (!stripped) continue;
-
-    // Skip non-food lines
-    if (stripped.length < 3) continue;
-    if (NON_FOOD_PATTERNS.some(p => p.test(stripped))) continue;
-
-    // Skip weight/measurement sub-lines
-    if (WEIGHT_LINE_RE.test(stripped)) continue;
-
-    // Extract item name and optional price
-    let name = null;
-    let price = null;
-
-    // Try 2+ space gap pattern first, then inline $X.XX pattern
-    const priceMatch = ITEM_PRICE_RE.exec(stripped) || INLINE_PRICE_RE.exec(stripped);
-    if (priceMatch) {
-      name = priceMatch[1];
-      price = parseFloat(priceMatch[2]) || null;
-    } else if (/[a-zA-Z]{2,}/.test(stripped)) {
-      name = stripped;
-    }
-
-    if (!name) continue;
-
-    // Normalize
-    name = normalizeName(name);
-    if (name.length < 2) continue;
-
-    // Deduplicate
-    const key = name.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-
-    // Fuzzy match against FRIDGE_EXPIRY — only keep recognized food items
-    const matched = matchFood(name);
-    if (matched) {
-      const canonical = matched.replace(/\b\w/g, c => c.toUpperCase());
-      items.push({ name: canonical, price, section: 'fridge', exp_days: FRIDGE_EXPIRY[matched] });
-    }
-  }
-
-  return items;
-}
-
 // --- API Routes ---
 
 // GET /api/foods — return all foods
@@ -305,7 +56,6 @@ app.post('/api/foods', (req, res) => {
   for (const food of foods) {
     if (!food.id || !food.name) continue;
 
-    // Resolve emoji if not provided
     if (!food.icon) {
       food.icon = resolveEmoji(food.name);
     }
@@ -354,52 +104,7 @@ app.delete('/api/foods/:id', (req, res) => {
   }
 });
 
-// Fridge expiry defaults (days) — subset from expiry_dates.js
-const FRIDGE_EXPIRY = {
-  apples: 21, blueberries: 7, broccoli: 7, cauliflower: 7,
-  cilantro: 3, chives: 3, lemon: 21, lime: 21, lettuce: 5,
-  grapes: 7, melons: 4, pears: 4, artichokes: 14, beets: 10,
-  eggplant: 4, garlic: 10, ginger: 14, onions: 60, potatoes: 14,
-  squash: 14, tomatoes: 7, ketchup: 365, 'maple syrup': 365,
-  mayonnaise: 75, mustard: 365, 'olive oil': 365, salsa: 365,
-  'soy sauce': 1095, vinegar: 730, rice: 730, bacon: 14,
-  chicken: 2, 'ground pork': 2, salmon: 2, tilapia: 2, bass: 2,
-  pork: 3, shrimp: 2, shellfish: 2, steak: 3, mushrooms: 7,
-  raspberries: 3, strawberries: 3, butter: 90, 'cream cheese': 60,
-  eggs: 35, 'heavy cream': 30, milk: 7, 'sour cream': 21,
-  tofu: 21, yogurt: 10, 'half-and-half': 4, 'ricotta cheese': 7,
-  'cottage cheese': 7, cheese: 7, juice: 21, 'orange juice': 21,
-  'apple juice': 21, 'mango juice': 21, miso: 90, scallops: 2,
-  squid: 2, 'ground beef': 2, 'lamb chop': 5, lobster: 2,
-  crab: 2, mussels: 2, oysters: 2, sausage: 15, ham: 7,
-  turkey: 2, 'ground turkey': 2, 'fried chicken': 4,
-  avocados: 4, bananas: 2, kiwi: 4, papaya: 7, mangos: 7,
-  peaches: 4, nectarines: 4, asparagus: 4, 'bok choy': 3,
-  'brussel sprouts': 5, carrots: 21, celery: 14, corn: 2,
-  cucumbers: 5, okra: 3, peppers: 5, radishes: 12, spinach: 2,
-  guacamole: 4, sandwich: 4, burrito: 4, bread: 7, bagels: 14,
-  pancakes: 4, waffles: 4, tempeh: 14, cheesecake: 7,
-  beans: 365, cereal: 365, coffee: 14, 'chocolate syrup': 365,
-  grapefruit: 21, oranges: 14, orange: 14, watermelon: 7,
-  pineapple: 5, coconut: 7, plums: 5, cherries: 7,
-  romaine: 5, kale: 5, arugula: 3, cabbage: 14,
-  'sweet potato': 14, zucchini: 5, 'green beans': 5,
-  hummus: 7, tortillas: 14, pasta: 365, flour: 365,
-  sugar: 730, honey: 730, 'peanut butter': 90, jam: 365,
-  'almond milk': 7, 'oat milk': 7, cream: 14, deli: 5,
-};
-
-function lookupFridgeExpiry(name) {
-  const lower = name.toLowerCase();
-  if (FRIDGE_EXPIRY[lower] !== undefined) return FRIDGE_EXPIRY[lower];
-  for (const [key, days] of Object.entries(FRIDGE_EXPIRY)) {
-    if (lower.includes(key) || key.includes(lower)) return days;
-  }
-  return 7; // default 7 days
-}
-
-// POST /api/fridge — quick-add a single item to the fridge
-// Body: { "name": "Milk" }  (only name is required)
+// POST /api/fridge — quick-add a single item
 app.post('/api/fridge', (req, res) => {
   const { name } = req.body;
   if (!name) {
@@ -408,7 +113,7 @@ app.post('/api/fridge', (req, res) => {
 
   const id = Math.floor(10000 + Math.random() * 90000);
   const today = new Date().toISOString().slice(0, 10);
-  const expiryDays = lookupFridgeExpiry(name);
+  const expiryDays = lookupExpiry(name);
   const expDate = new Date(Date.now() + expiryDays * 86400000)
     .toISOString().slice(0, 10);
 
@@ -418,14 +123,14 @@ app.post('/api/fridge', (req, res) => {
     icon: resolveEmoji(name),
     buyDate: today,
     expDate,
-    section: 'fridge',
+    section: lookupSection(name),
   };
 
   const data = readData();
   data[id] = food;
   writeData(data);
 
-  console.log(`[bridge] Fridge: added "${name}" (expires ${expDate})`);
+  console.log(`[bridge] Added "${name}" → ${food.section} (expires ${expDate})`);
   res.json({ added: food });
 });
 
@@ -460,7 +165,7 @@ app.post('/api/scan', upload.single('receipt'), async (req, res) => {
     const parsed = parseReceipt(text);
     console.log(`[scan]   Parsed ${parsed.length} item(s) from ${lines.filter(l => l.trim()).length} non-empty lines`);
     for (const item of parsed) {
-      console.log(`[scan]     • ${item.name} (exp ${item.exp_days}d, ${item.section})${item.price != null ? ' $' + item.price.toFixed(2) : ''}`);
+      console.log(`[scan]     • ${item.name} → ${item.section} (exp ${item.exp_days}d)${item.price != null ? ' $' + item.price.toFixed(2) : ''}`);
     }
 
     // Build food objects and write to data file
@@ -486,7 +191,7 @@ app.post('/api/scan', upload.single('receipt'), async (req, res) => {
 
       data[id] = food;
       addedItems.push(food);
-      console.log(`[scan]     + [${id}] ${food.icon} ${food.name} (expires ${expDate})`);
+      console.log(`[scan]     + [${id}] ${food.icon} ${food.name} → ${food.section} (expires ${expDate})`);
     }
 
     writeData(data);
@@ -622,7 +327,6 @@ app.get('/api/health', (req, res) => {
 // --- Start server ---
 
 app.listen(PORT, () => {
-  // Initialize data file if it doesn't exist
   if (!fs.existsSync(DATA_FILE)) {
     writeData({});
     console.log(`[bridge] Created empty data file: ${DATA_FILE}`);
@@ -632,7 +336,7 @@ app.listen(PORT, () => {
   console.log(`[bridge] Endpoints:`);
   console.log(`[bridge]   GET    /api/foods      - list all foods`);
   console.log(`[bridge]   POST   /api/foods      - add foods (scanner)`);
-  console.log(`[bridge]   POST   /api/fridge     - quick-add one item to fridge`);
+  console.log(`[bridge]   POST   /api/fridge     - quick-add one item`);
   console.log(`[bridge]   PUT    /api/foods/:id  - update a food`);
   console.log(`[bridge]   DELETE /api/foods/:id  - delete a food`);
   console.log(`[bridge]   POST   /api/scan       - upload receipt image (OCR)`);

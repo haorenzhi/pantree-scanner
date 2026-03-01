@@ -130,8 +130,8 @@ const Food = ({ food, section }) => {
         </ItemImg>
   
         <ItemName >{
-          food.name.length > 10 ?
-            food.name.substring(0, 10) + "..." :
+          food.name.length > 20 ?
+            food.name.substring(0, 20) + "..." :
             food.name
         } {' '}</ItemName>
   
@@ -153,8 +153,8 @@ const Food = ({ food, section }) => {
         </ItemImg>
   
         <ItemName >{
-          food.name.length > 10 ?
-            food.name.substring(0, 10) + "..." :
+          food.name.length > 20 ?
+            food.name.substring(0, 20) + "..." :
             food.name
         } {' '}</ItemName>
   
@@ -170,7 +170,7 @@ const Food = ({ food, section }) => {
 const editButton = async ({ food, user }) => {
 
   deleteFromFirebase(food, user);
-  ReactDOM.render(<EditMyForm date={food.buyDate} exp={food.expDate} n={food.name} />, document.getElementById("root"));
+  ReactDOM.render(<EditMyForm date={food.buyDate} exp={food.expDate} n={food.name} sec={food.section} />, document.getElementById("root"));
 
   return;
 };

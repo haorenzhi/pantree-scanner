@@ -319,7 +319,7 @@ export const RecMyForm = (param) => {
     na = param.n;
   }
 
-  //console.log(param.n);
+  var sec = param.sec || 'fridge';
 
   const suggestExpiry = (foodName, foodSection, isSuggested) => {
     setName(foodName)
@@ -355,7 +355,7 @@ export const RecMyForm = (param) => {
   const [expDate, setexpDate] = useState(experation);
   const [icon, setIcon] = useState("");
   const user = useUserState();
-  const [section, setSection] = useState('fridge');
+  const [section, setSection] = useState(sec);
   const [isSuggested, setIsSuggested] = useState(false);
 
   const onSubmit = (e) => {
@@ -372,9 +372,6 @@ export const RecMyForm = (param) => {
     }
 
     update({ icon, name, buyDate, expDate, user, section });
-
-    if (name !== "") {
-    }
 
     back();
   };
