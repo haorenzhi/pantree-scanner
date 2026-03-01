@@ -1,86 +1,179 @@
-import { initializeApp } from 'firebase/app';
-import { getDatabase, onValue, ref, set } from 'firebase/database';
-import { useState, useEffect } from 'react';
-import { getAuth, GoogleAuthProvider, onIdTokenChanged, signInWithPopup, signOut } from 'firebase/auth';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
-const firebaseConfig = {
-  apiKey: "AIzaSyA7Ww6tN1P-d1MEnuJUetYtQ3pmPwz91Cc",
-  authDomain: "pantree-baf7d.firebaseapp.com",
-  databaseURL: "https://pantree-baf7d-default-rtdb.firebaseio.com",
-  projectId: "pantree-baf7d",
-  storageBucket: "pantree-baf7d.appspot.com",
-  messagingSenderId: "530085380611",
-  appId: "1:530085380611:web:417b99b5e0f77741668436"
+const STORAGE_KEY = 'pantree-foods';
+const STORAGE_EVENT = 'pantree-storage';
+const BRIDGE_URL = process.env.REACT_APP_BRIDGE_URL || 'http://localhost:3001';
+const POLL_INTERVAL = 2000; // ms
+
+const localUser = { uid: 'local', email: 'local user' };
+
+// --- Bridge API helpers ---
+
+let bridgeAvailable = null; // null = unknown, true/false after first check
+
+async function checkBridge() {
+  try {
+    const res = await fetch(`${BRIDGE_URL}/api/health`, { method: 'GET' });
+    bridgeAvailable = res.ok;
+  } catch {
+    bridgeAvailable = false;
+  }
+  return bridgeAvailable;
+}
+
+async function fetchFoods() {
+  try {
+    const res = await fetch(`${BRIDGE_URL}/api/foods`);
+    if (res.ok) return await res.json();
+  } catch { /* bridge unavailable */ }
+  return null;
+}
+
+async function postFood(food) {
+  try {
+    const res = await fetch(`${BRIDGE_URL}/api/foods`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ foods: [food] }),
+    });
+    return res.ok;
+  } catch { return false; }
+}
+
+async function deleteFood(id) {
+  try {
+    const res = await fetch(`${BRIDGE_URL}/api/foods/${id}`, { method: 'DELETE' });
+    return res.ok;
+  } catch { return false; }
+}
+
+// --- localStorage fallback ---
+
+const readFoods = () => {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+  } catch {
+    return {};
+  }
 };
 
-const firebase = initializeApp(firebaseConfig);
-const database = getDatabase(firebase);
+const writeFoods = (foods) => {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(foods));
+  window.dispatchEvent(new Event(STORAGE_EVENT));
+};
 
-
+// --- Public API (same interface as before) ---
 
 export const useData = (path, transform) => {
-    const [data, setData] = useState();
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState();
-  
-    useEffect(() => {
-      const dbRef = ref(database, path);
-      const devMode = !process.env.NODE_ENV || process.env.NODE_ENV === 'development';
-      if (devMode) { console.log(`loading ${path}`); }
-      return onValue(dbRef, (snapshot) => {
-        const val = snapshot.val();
-        if (devMode) { console.log(val); }
-        setData(transform ? transform(val) : val);
-        setLoading(false);
-        setError(null);
-      }, (error) => {
-        setData(null);
-        setLoading(false);
-        setError(error);
-      });
-    }, [path, transform]);
-    
-    return [data, loading, error];
-  };
+  const [data, setDataState] = useState();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState();
+  const lastSnapshotRef = useRef('');
 
-  export const setData = (path, value) => (
-    set(ref(database, path), value)
-  );
+  const load = useCallback(async () => {
+    try {
+      // On first call, detect bridge availability
+      if (bridgeAvailable === null) await checkBridge();
 
-  export const deleteFromFirebase = async (foodie, user) => {
-    if (foodie) {
-      try {
-        await setData(`users/${user.uid}/foods/${foodie.id}/`, null);
-      } catch (error) {
-        alert(error);
+      let foods;
+      if (bridgeAvailable) {
+        foods = await fetchFoods();
+        if (foods !== null) {
+          // Sync to localStorage as cache (without dispatching event
+          // to avoid re-triggering this load in a loop)
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(foods));
+        } else {
+          foods = readFoods();
+        }
+      } else {
+        foods = readFoods();
       }
+
+      // Only update state if data actually changed
+      const snapshot = JSON.stringify(foods);
+      if (snapshot === lastSnapshotRef.current) return;
+      lastSnapshotRef.current = snapshot;
+
+      const val = { foods };
+      setDataState(transform ? transform(val) : val);
+      setLoading(false);
+      setError(null);
+    } catch (e) {
+      setDataState(null);
+      setLoading(false);
+      setError(e);
     }
-  };
+  }, [transform]);
 
-  export const pushToFirebase = async (foodie, user) => {
-    if (foodie) {
-      try {
-        await setData(`users/${user.uid}/foods/${foodie.id}/`, foodie);
-      } catch (error) {
-        alert(error);
-      }
+  useEffect(() => {
+    load();
+
+    // Listen for local storage events (from setData calls)
+    window.addEventListener(STORAGE_EVENT, load);
+
+    // Poll the bridge server for changes (e.g., from the receipt scanner)
+    let pollTimer = null;
+    if (bridgeAvailable !== false) {
+      pollTimer = setInterval(load, POLL_INTERVAL);
     }
-  };
-  
 
-  export const useUserState = () => {
-    const [user, setUser] = useState();
-  
-    useEffect(() => {
-      onIdTokenChanged(getAuth(firebase), setUser);
-    }, []);
-      
-    return user;
-  };
-  
-  export const signInWithG = () => {
-    signInWithPopup(getAuth(firebase), new GoogleAuthProvider());
-  };
+    return () => {
+      window.removeEventListener(STORAGE_EVENT, load);
+      if (pollTimer) clearInterval(pollTimer);
+    };
+  }, [path, load]);
 
-  export const signOutOfG = () => signOut(getAuth(firebase));
+  return [data, loading, error];
+};
 
+export const setData = async (path, value) => {
+  const parts = path.split('/').filter(Boolean);
+  const foodId = parts[parts.length - 1];
+
+  if (value === null) {
+    // Delete
+    if (bridgeAvailable) {
+      await deleteFood(foodId);
+    }
+    const foods = readFoods();
+    delete foods[foodId];
+    writeFoods(foods);
+  } else {
+    // Add / update
+    if (bridgeAvailable) {
+      await postFood(value);
+    }
+    const foods = readFoods();
+    foods[foodId] = value;
+    writeFoods(foods);
+  }
+};
+
+export const deleteFromFirebase = async (foodie, user) => {
+  if (foodie) {
+    try {
+      await setData(`users/${user.uid}/foods/${foodie.id}/`, null);
+    } catch (error) {
+      alert(error);
+    }
+  }
+};
+
+export const pushToFirebase = async (foodie, user) => {
+  if (foodie) {
+    try {
+      await setData(`users/${user.uid}/foods/${foodie.id}/`, foodie);
+    } catch (error) {
+      alert(error);
+    }
+  }
+};
+
+export const useUserState = () => {
+  const [user] = useState(localUser);
+  return user;
+};
+
+export const signInWithG = () => {};
+
+export const signOutOfG = () => {};
