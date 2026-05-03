@@ -25,13 +25,28 @@ from capture import ReceiptCamera, capture_receipt, load_test_images
 from ocr import ocr_receipt
 from parser import parse_receipt
 from send import send_to_pantree
+from led import init_leds, leds_on, leds_idle, leds_off, cleanup_leds
 
 # GPIO pin for the scan button (active LOW with internal pull-up)
 BUTTON_PIN = 23
 
 
 def wait_for_button():
-    """Wait for physical button press on GPIO to start a scan."""
+    """Wait for physical button press on GPIO to start a scan.
+    Uses gpiozero (works on Trixie kernel 6.12+) with RPi.GPIO fallback.
+    """
+    # Try gpiozero first — it uses the modern character device interface
+    try:
+        from gpiozero import Button
+        btn = Button(BUTTON_PIN, pull_up=True, bounce_time=0.3)
+        print("\nReady. Press the scan button to start...")
+        btn.wait_for_press()
+        btn.close()
+        return True
+    except Exception:
+        pass
+
+    # Fallback to RPi.GPIO (works on older kernels)
     try:
         import RPi.GPIO as GPIO
         GPIO.setmode(GPIO.BCM)
@@ -40,6 +55,9 @@ def wait_for_button():
         GPIO.wait_for_edge(BUTTON_PIN, GPIO.FALLING, bouncetime=300)
         return True
     except ImportError:
+        return False
+    except RuntimeError as e:
+        print(f"[main] GPIO edge detection failed: {e}")
         return False
 
 
@@ -70,22 +88,38 @@ def display_items(items):
         )
 
 
-def scan_receipt_hardware():
-    """Full hardware scan pipeline using Pi Camera and stepper motor."""
+def scan_receipt_hardware(use_motor=True):
+    """Full hardware scan pipeline using Pi Camera and stepper motor.
+    
+    Args:
+        use_motor: If False, skip motor and take a single snapshot instead.
+    """
     # Initialize hardware
-    motor_ok = init_motor()
+    motor_ok = False
+    if use_motor:
+        motor_ok = init_motor()
     camera = ReceiptCamera()
     camera_ok = camera.init_camera()
+    led_ok = init_leds()
 
-    if not motor_ok or not camera_ok:
-        print("[main] Hardware initialization failed")
+    if not camera_ok:
+        print("[main] Camera initialization failed")
         print("[main] Use --test or --text mode for testing without hardware")
         return
 
     try:
-        # Capture frames while feeding receipt
-        print("[main] Scanning receipt...")
-        frames = capture_receipt(camera, feed_mm)
+        # Turn on LEDs for illumination during scanning
+        leds_on()
+
+        if use_motor and motor_ok:
+            # Full multi-frame scan: feed receipt through rollers
+            print("[main] Scanning receipt (motor + camera)...")
+            frames = capture_receipt(camera, feed_mm)
+        else:
+            # Single snapshot mode
+            print("[main] Taking snapshot...")
+            frame = camera.capture_frame()
+            frames = [frame] if frame else []
 
         if not frames:
             print("[main] No frames captured. Is a receipt inserted?")
@@ -116,8 +150,10 @@ def scan_receipt_hardware():
             print("  Skipped.")
 
     finally:
+        leds_off()
         camera.close()
         cleanup_motor()
+        cleanup_leds()
 
 
 def scan_from_image(image_path):
@@ -194,8 +230,12 @@ def main():
         help="Text mode: process a text file (skips OCR, tests parser only)"
     )
     parser.add_argument(
-        "--bridge-url", default="http://localhost:3001/api/foods",
-        help="Bridge server URL (default: http://localhost:3001/api/foods)"
+        "--no-motor", action="store_true",
+        help="Snapshot mode: take a single photo per button press (no stepper motor)"
+    )
+    parser.add_argument(
+        "--bridge-url", default="http://localhost:4000/api/foods",
+        help="Bridge server URL (default: http://localhost:4000/api/foods)"
     )
     args = parser.parse_args()
 
@@ -211,29 +251,44 @@ def main():
         # Hardware mode — loop waiting for button/keyboard
         has_button = False
         try:
-            import RPi.GPIO
+            from gpiozero import Button
             has_button = True
         except ImportError:
-            pass
+            try:
+                import RPi.GPIO
+                has_button = True
+            except ImportError:
+                pass
 
         print("[main] Running in hardware mode")
         if not has_button:
             print("[main] GPIO not available — using keyboard trigger")
 
+        # Show idle LED while waiting for scans
+        init_leds()
+        leds_idle()
+
         try:
             while True:
                 if has_button:
                     if not wait_for_button():
-                        break
+                        # GPIO edge detection failed — fall back to keyboard
+                        print("[main] Falling back to keyboard trigger")
+                        has_button = False
+                        continue
                 else:
                     if not wait_for_keyboard():
                         break
 
-                scan_receipt_hardware()
+                scan_receipt_hardware(use_motor=not args.no_motor)
+                # Return to idle indicator between scans
+                leds_idle()
 
         except KeyboardInterrupt:
             print("\n[main] Shutting down...")
         finally:
+            leds_off()
+            cleanup_leds()
             cleanup_motor()
 
     print("\nDone.")

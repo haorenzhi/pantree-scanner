@@ -15,6 +15,12 @@ const DATA_FILE = path.join(__dirname, 'pantree-data.json');
 app.use(cors());
 app.use(express.json());
 
+// Serve React frontend static files (build/ folder)
+const buildPath = path.join(__dirname, '..', 'build');
+if (fs.existsSync(buildPath)) {
+  app.use(express.static(buildPath));
+}
+
 // Multer — in-memory storage for uploaded receipt images (max 10 MB)
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
@@ -325,6 +331,13 @@ app.get('/api/health', (req, res) => {
 });
 
 // --- Start server ---
+
+// Catch-all: serve React app for any non-API route
+if (fs.existsSync(buildPath)) {
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(buildPath, 'index.html'));
+  });
+}
 
 app.listen(PORT, () => {
   if (!fs.existsSync(DATA_FILE)) {

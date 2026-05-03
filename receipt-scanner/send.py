@@ -11,7 +11,7 @@ from datetime import date, timedelta
 import requests
 
 # Bridge server URL — change host if Pantree runs on a different machine
-BRIDGE_URL = "http://localhost:3001/api/foods"
+BRIDGE_URL = "http://localhost:4000/api/foods"
 
 
 def send_to_pantree(items, bridge_url=BRIDGE_URL):

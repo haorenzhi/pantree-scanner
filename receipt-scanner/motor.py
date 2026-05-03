@@ -1,14 +1,18 @@
 """
 Stepper motor control for receipt feeder.
 
-Controls a 28BYJ-48 stepper motor via ULN2003 driver board
-to scroll a receipt past the camera.
+Controls a NEMA 17 stepper motor via Easy Driver (A3967) board
+using STEP/DIR pulse interface to scroll a receipt past the camera.
 
-GPIO pin mapping (active BCM pins):
-  IN1 -> GPIO 17
-  IN2 -> GPIO 18
-  IN3 -> GPIO 27
-  IN4 -> GPIO 22
+Easy Driver wiring (BCM pins):
+  STEP   -> GPIO 17   (pulse rising-edge = one microstep)
+  DIR    -> GPIO 27   (HIGH = forward, LOW = reverse)
+  ENABLE -> GPIO 22   (active-LOW: LOW = enabled, HIGH = disabled/sleep)
+
+Easy Driver defaults to 1/8 microstepping (MS1=HIGH, MS2=HIGH).
+  NEMA 17 = 200 full steps/rev  ->  1600 microsteps/rev at 1/8.
+
+Power: 12V supply to Easy Driver M+ / GND. Pi 5V NOT connected to driver.
 """
 
 import time
@@ -18,69 +22,95 @@ try:
 except ImportError:
     GPIO = None
 
-# GPIO pins connected to ULN2003 IN1-IN4
-MOTOR_PINS = [17, 18, 27, 22]
+# --- Pin assignments (BCM) ---
+STEP_PIN = 17
+DIR_PIN = 27
+ENABLE_PIN = 22
 
-# Half-step sequence for smoother motion
-STEP_SEQUENCE = [
-    [1, 0, 0, 0],
-    [1, 1, 0, 0],
-    [0, 1, 0, 0],
-    [0, 1, 1, 0],
-    [0, 0, 1, 0],
-    [0, 0, 1, 1],
-    [0, 0, 0, 1],
-    [1, 0, 0, 1],
-]
+ALL_MOTOR_PINS = [STEP_PIN, DIR_PIN, ENABLE_PIN]
 
-# 28BYJ-48 specs: 4096 half-steps per revolution, ~6cm roller circumference
-STEPS_PER_MM = 4096 / 60  # ~68 steps per mm of paper travel
-DEFAULT_STEP_DELAY = 0.001  # seconds between steps (~5mm/s feed rate)
+# --- Motor / mechanical constants ---
+FULL_STEPS_PER_REV = 200          # NEMA 17 standard
+MICROSTEP_DIVISOR = 8             # Easy Driver default (1/8)
+MICROSTEPS_PER_REV = FULL_STEPS_PER_REV * MICROSTEP_DIVISOR  # 1600
+
+# Roller circumference — adjust to your actual roller diameter.
+# Default assumes ~20mm diameter roller -> C = π * 20 ≈ 62.8mm
+ROLLER_CIRCUMFERENCE_MM = 62.8
+STEPS_PER_MM = MICROSTEPS_PER_REV / ROLLER_CIRCUMFERENCE_MM  # ~25.5
+
+# Pulse timing — total cycle = delay per step.
+# 0.001s (1ms) per microstep -> ~1600ms/rev -> ~39 mm/s
+# 0.002s (2ms) per microstep -> ~5 mm/s (matches original feed rate)
+DEFAULT_STEP_DELAY = 0.002  # seconds per microstep (~5 mm/s)
+
+# Easy Driver minimum pulse width is ~1μs; we use 50μs for safety.
+PULSE_WIDTH = 0.00005  # 50 μs HIGH pulse
 
 
 def init_motor():
-    """Initialize GPIO pins for motor control."""
+    """Initialize GPIO pins for Easy Driver motor control."""
     if GPIO is None:
         print("[motor] RPi.GPIO not available (not running on Pi)")
         return False
     GPIO.setmode(GPIO.BCM)
     GPIO.setwarnings(False)
-    for pin in MOTOR_PINS:
-        GPIO.setup(pin, GPIO.OUT)
-        GPIO.output(pin, 0)
+    # STEP and DIR as outputs, default LOW
+    GPIO.setup(STEP_PIN, GPIO.OUT, initial=GPIO.LOW)
+    GPIO.setup(DIR_PIN, GPIO.OUT, initial=GPIO.LOW)
+    # ENABLE active-LOW: set LOW to enable the driver
+    GPIO.setup(ENABLE_PIN, GPIO.OUT, initial=GPIO.LOW)
+    print("[motor] Easy Driver initialized (STEP=17, DIR=27, EN=22)")
     return True
 
 
-def cleanup_motor():
-    """Release GPIO pins."""
+def enable_motor():
+    """Enable the Easy Driver (active-LOW)."""
     if GPIO is None:
         return
-    for pin in MOTOR_PINS:
-        GPIO.output(pin, 0)
-    GPIO.cleanup(MOTOR_PINS)
+    GPIO.output(ENABLE_PIN, GPIO.LOW)
+
+
+def disable_motor():
+    """Disable the Easy Driver to save power and reduce heat."""
+    if GPIO is None:
+        return
+    GPIO.output(ENABLE_PIN, GPIO.HIGH)
+
+
+def cleanup_motor():
+    """Disable driver and release GPIO pins."""
+    if GPIO is None:
+        return
+    try:
+        disable_motor()
+        GPIO.output(STEP_PIN, GPIO.LOW)
+        GPIO.output(DIR_PIN, GPIO.LOW)
+        GPIO.cleanup(ALL_MOTOR_PINS)
+    except RuntimeError:
+        # Pins were never set up — nothing to clean
+        pass
 
 
 def feed_steps(steps, delay=DEFAULT_STEP_DELAY):
     """
-    Advance the receipt by a given number of half-steps.
+    Advance the receipt by a given number of microsteps.
     Positive = feed forward, negative = reverse.
     """
     if GPIO is None:
-        print(f"[motor] Simulating {steps} steps")
+        print(f"[motor] Simulating {steps} microsteps")
         return
 
-    direction = 1 if steps > 0 else -1
-    seq = STEP_SEQUENCE if direction == 1 else list(reversed(STEP_SEQUENCE))
+    # Set direction
+    GPIO.output(DIR_PIN, GPIO.HIGH if steps > 0 else GPIO.LOW)
 
-    for i in range(abs(steps)):
-        phase = seq[i % len(seq)]
-        for pin_idx, pin in enumerate(MOTOR_PINS):
-            GPIO.output(pin, phase[pin_idx])
-        time.sleep(delay)
-
-    # De-energize coils to prevent heating
-    for pin in MOTOR_PINS:
-        GPIO.output(pin, 0)
+    # Pulse the STEP pin
+    pause = max(delay - PULSE_WIDTH, PULSE_WIDTH)
+    for _ in range(abs(steps)):
+        GPIO.output(STEP_PIN, GPIO.HIGH)
+        time.sleep(PULSE_WIDTH)
+        GPIO.output(STEP_PIN, GPIO.LOW)
+        time.sleep(pause)
 
 
 def feed_mm(mm, delay=DEFAULT_STEP_DELAY):

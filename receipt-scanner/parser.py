@@ -119,6 +119,7 @@ EXPIRY_DB = [
 # Common receipt abbreviations -> expanded form
 ABBREVIATIONS = {
     "ORG": "Organic",
+    "OG": "Organic",
     "GRN": "Green",
     "BNL": "Boneless",
     "BNLS": "Boneless",
@@ -131,6 +132,8 @@ ABBREVIATIONS = {
     "FRZ": "Frozen",
     "FRSH": "Fresh",
     "WHL": "Whole",
+    "MLK": "Milk",
+    "WHLMLK": "Whole Milk",
     "LG": "Large",
     "SM": "Small",
     "MED": "Medium",
@@ -142,12 +145,27 @@ ABBREVIATIONS = {
     "BLK": "Black",
     "CRSP": "Crisp",
     "SWT": "Sweet",
+    "JMBO": "Jumbo",
+    "PNBTR": "Peanut Butter",
+    "CHKN": "Chicken",
+    "SLCD": "Sliced",
+    "SLTD": "Salted",
+    "CRNCHY": "Crunchy",
+    "YOGHURT": "Yogurt",
+    "YGHRT": "Yogurt",
     "LB": "",  # unit, not a word
     "OZ": "",
     "CT": "",
     "EA": "",
     "PK": "",
+    "0G": "",  # sometimes OCR reads "OG" as "0G"
 }
+
+# Store brand prefixes to strip from item names (e.g., "365" = Whole Foods)
+STORE_BRAND_PREFIXES = re.compile(
+    r"^(365|KIRKLAND|GV|MMRK|STORE|HEB|TJ|PVLB|PDVG|PNLND|LACRX|BROO|DRSCL|NOOSA|OVFOGL)",
+    re.IGNORECASE,
+)
 
 # Regex patterns for non-food lines to filter out
 NON_FOOD_PATTERNS = [
@@ -160,18 +178,33 @@ NON_FOOD_PATTERNS = [
     re.compile(r"\b(MEMBER|LOYALTY|REWARDS|SAVINGS|DISCOUNT|COUPON)\b", re.IGNORECASE),
     re.compile(r"\b(REFUND|RETURN|VOID|CANCEL)\b", re.IGNORECASE),
     re.compile(r"\b(TEL|FAX|PHONE|WWW\.|HTTP|\.COM|\.CA)\b", re.IGNORECASE),
+    re.compile(r"\b(DEPOSIT|BOTTLE\s*DEP)\b", re.IGNORECASE),
+    re.compile(r"\b(NET\s*SALES|SOLD\s*ITEMS|SOLD\s*ITEM|PAID)\b", re.IGNORECASE),
+    re.compile(r"\b(MID|TID|TERMINAL|AUTH|APPROVAL|SEQUENCE)\b", re.IGNORECASE),
+    re.compile(r"\b(MARKET|FOODS|GROCERY|SUPERMRKT|SUPERMARKET)\b", re.IGNORECASE),
+    re.compile(r"^F?CODS\.?$", re.IGNORECASE),  # OCR mangled "FOODS"
+    re.compile(r"BRYANT\s*PARK|BPK$", re.IGNORECASE),  # store location
+    re.compile(r"^[A-Z]{2,}PARK", re.IGNORECASE),  # joined store location names
+    re.compile(r"\d{3}[\-.]\d{3}[\-.]\d{4}"),  # phone numbers (917-728-5700)
+    re.compile(r"\b[A-Z]{2}\s*\d{5}\b"),  # state + zip (NY10036)
+    re.compile(r"\b\d+\w*\s*(Ave|St|Rd|Blvd|Dr|Ln|Way|Pkwy|Ct)\b", re.IGNORECASE),  # addresses
     re.compile(r"^\d{6,}$"),  # barcode numbers
     re.compile(r"^\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4}"),  # dates
     re.compile(r"^\d{1,2}:\d{2}"),  # times
     re.compile(r"^[#*]"),  # metadata lines
     re.compile(r"^[\-=_]{3,}$"),  # separator lines
     re.compile(r"^\s*\*{3,}"),  # asterisk separators
+    re.compile(r"^\d+$"),  # lines that are only numbers
+    re.compile(r"NETSALES", re.IGNORECASE),  # joined "NetSales"
+    re.compile(r"SOLDITEMS", re.IGNORECASE),  # joined "SoldItems"
+    re.compile(r"BOTTLEDEPOSIT", re.IGNORECASE),  # joined "BottleDeposit"
 ]
 
 # Pattern to extract item name and price from a receipt line
-# Matches: ITEM NAME            $X.XX  or  ITEM NAME   X.XX T
+# Matches: ITEM NAME $X.XX  or  ITEM $4.09F  or  ITEM NAME   X.XX T
+# Whole Foods uses F = food (non-taxable), T = taxable (non-food)
 ITEM_PRICE_PATTERN = re.compile(
-    r"^(.+?)\s{2,}\$?(\d+\.\d{2})\s*[A-Z]?\s*$"
+    r"^(.+?)\s+\$?(\d+\.\d{2})\s*([FfTt]?)\s*[Tt]?\s*$"
 )
 
 # Pattern to detect quantity prefixes like "2 x" or "2@"
@@ -200,6 +233,31 @@ def _normalize_name(raw_name):
 
     # Remove quantity prefixes
     name = QTY_PREFIX_PATTERN.sub("", name)
+
+    # Remove trailing weight/unit suffixes like "85/151LB", "12PK"
+    name = re.sub(r"\d+/\d+\s*(?:LB|OZ|KG|G)\b", "", name, flags=re.IGNORECASE)
+    name = re.sub(r"\d+\s*(?:PK|CT|OZ|LB|EA)\b", "", name, flags=re.IGNORECASE)
+
+    # Strip known store brand prefixes (e.g., "365WHLMLK" -> "WHLMLK")
+    name = STORE_BRAND_PREFIXES.sub("", name).strip()
+
+    # Try to split concatenated uppercase words using known food keywords
+    # e.g. "HONEYYOGHURT" -> "HONEY YOGHURT", "GRNDBEEF" -> "GRND BEEF"
+    food_keywords = [
+        "MILK", "EGGS", "BEEF", "PORK", "CHICKEN", "SALMON", "SHRIMP",
+        "YOGURT", "YOGHURT", "CHEESE", "BUTTER", "CREAM",
+        "STRAWBERRIES", "BLUEBERRIES", "RASPBERRIES", "GRAPEFRUIT",
+        "ROMAINE", "LETTUCE", "SPINACH", "BROCCOLI", "CORN", "SALSA",
+        "CHIPS", "TOWELS", "BREAD", "RICE", "BEANS", "JUICE",
+        "ALE", "BEER", "WINE", "WATER",
+    ]
+    name_upper = name.upper()
+    for kw in food_keywords:
+        idx = name_upper.find(kw)
+        if idx > 0 and name[idx - 1] != " ":
+            name = name[:idx] + " " + name[idx:]
+            name_upper = name.upper()
+            break  # one split is usually enough
 
     # Expand abbreviations
     words = name.split()
@@ -346,6 +404,7 @@ def parse_receipt(raw_text):
         # Extract item name and optional price
         name = None
         price = None
+        is_taxable = False  # Whole Foods: T = taxable non-food
 
         match = ITEM_PRICE_PATTERN.match(stripped)
         if match:
@@ -354,11 +413,29 @@ def parse_receipt(raw_text):
                 price = float(match.group(2))
             except ValueError:
                 price = None
+            # Whole Foods suffix: F = food, T = taxable (non-food)
+            suffix = match.group(3).upper() if match.group(3) else ""
+            if suffix == "T":
+                is_taxable = True
         else:
+            # Try extracting price embedded with $ sign (e.g. "ITEM $4.09F")
+            inline_price = re.search(r"\$?(\d+\.\d{2})\s*[FfTt]?\s*$", stripped)
+            if inline_price:
+                try:
+                    price = float(inline_price.group(1))
+                except ValueError:
+                    pass
+                name = stripped[:inline_price.start()].strip()
             # Line without a clear price — treat the whole line as a name
-            # but only if it looks like text (has letters)
-            if re.search(r"[a-zA-Z]{2,}", stripped):
+            elif re.search(r"[a-zA-Z]{2,}", stripped):
                 name = stripped
+
+        # Skip taxable non-food items (paper towels, alcohol, etc.)
+        # but keep items that fuzzy-match a known food
+        if is_taxable and name:
+            norm = _normalize_name(name)
+            if not _match_food(norm):
+                continue
 
         if not name:
             continue
@@ -366,9 +443,15 @@ def parse_receipt(raw_text):
         # Normalize the name
         name = _normalize_name(name)
 
-        # Skip if too short or already seen
+        # Skip if too short, empty after normalization, or already seen
         if len(name) < 2 or name.lower() in seen_names:
             continue
+
+        # Skip lines that are mostly non-alpha (barcodes, IDs, etc.)
+        alpha_ratio = sum(1 for c in name if c.isalpha()) / max(len(name), 1)
+        if alpha_ratio < 0.5:
+            continue
+
         seen_names.add(name.lower())
 
         # Fuzzy match against expiry database
