@@ -71,6 +71,9 @@ bridge-server/lang-data/*.traineddata
 
 # Bridge server runtime data
 bridge-server/pantree-data.json
+bridge-server/pantree-events.json
+bridge-server/receipt-uploads/
+bridge-server/local-cache/
 
 # Production build output
 build/

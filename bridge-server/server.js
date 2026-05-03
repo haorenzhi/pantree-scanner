@@ -7,6 +7,7 @@ const Tesseract = require('tesseract.js');
 
 const { resolveEmoji, lookupExpiry, lookupSection } = require('./food-db');
 const { parseReceipt } = require('./receipt-parser');
+const { createPhase2Router } = require('./phase2/routes');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -14,6 +15,7 @@ const DATA_FILE = path.join(__dirname, 'pantree-data.json');
 
 app.use(cors());
 app.use(express.json());
+app.use('/api/phase2', createPhase2Router());
 
 // Serve React frontend static files (build/ folder)
 const buildPath = path.join(__dirname, '..', 'build');
@@ -353,6 +355,8 @@ app.listen(PORT, () => {
   console.log(`[bridge]   PUT    /api/foods/:id  - update a food`);
   console.log(`[bridge]   DELETE /api/foods/:id  - delete a food`);
   console.log(`[bridge]   POST   /api/scan       - upload receipt image (OCR)`);
+  console.log(`[bridge]   GET    /api/phase2/summary - local Phase 2 food intelligence`);
+  console.log(`[bridge]   POST   /api/phase2/events  - local consume/discard/etc events`);
   console.log(`[bridge]   GET    /scan           - mobile receipt scanner UI`);
   console.log(`[bridge]   GET    /api/health     - health check`);
 });
