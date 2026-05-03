@@ -17,6 +17,7 @@ struct ReceiptScannerView: View {
     @State private var showingCameraScanner = false
     @State private var selectedReceiptPhoto: PhotosPickerItem?
     @State private var isRecognizingReceiptPhoto = false
+    @FocusState private var isReceiptTextFocused: Bool
 
     private let parser = ReceiptParser()
 
@@ -30,6 +31,7 @@ struct ReceiptScannerView: View {
 
                     HStack {
                         Button("Use Sample Receipt") {
+                            isReceiptTextFocused = false
                             receiptText = SampleData.sampleReceipt
                             parseResult = nil
                             importedNames = []
@@ -60,6 +62,7 @@ struct ReceiptScannerView: View {
                     .accessibilityIdentifier("ChooseReceiptPhotoButton")
 
                     TextEditor(text: $receiptText)
+                        .focused($isReceiptTextFocused)
                         .frame(minHeight: 190)
                         .padding(8)
                         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
@@ -86,7 +89,17 @@ struct ReceiptScannerView: View {
                 }
                 .padding()
             }
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("Receipt")
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") {
+                        isReceiptTextFocused = false
+                    }
+                    .accessibilityIdentifier("DismissReceiptKeyboardButton")
+                }
+            }
             .sheet(isPresented: $showingCameraScanner) {
                 cameraScannerSheet
             }
@@ -98,6 +111,7 @@ struct ReceiptScannerView: View {
         #if canImport(VisionKit)
         if #available(iOS 16.0, *), DataScannerViewController.isSupported {
             Button("Scan With Camera") {
+                isReceiptTextFocused = false
                 showingCameraScanner = true
             }
             .buttonStyle(.borderedProminent)
@@ -127,6 +141,7 @@ struct ReceiptScannerView: View {
     }
 
     private func importReceipt() {
+        isReceiptTextFocused = false
         let result = parser.parse(receiptText)
         parseResult = result
         guard !result.items.isEmpty else {
@@ -143,6 +158,7 @@ struct ReceiptScannerView: View {
     }
 
     private func recognizeReceiptPhoto(_ item: PhotosPickerItem) {
+        isReceiptTextFocused = false
         Task {
             await MainActor.run {
                 isRecognizingReceiptPhoto = true

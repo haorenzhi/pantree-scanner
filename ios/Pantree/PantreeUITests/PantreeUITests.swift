@@ -11,7 +11,7 @@ final class PantreeUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Local-only food intelligence"].exists)
 
         app.tabBars.buttons["Inventory"].tap()
-    XCTAssertTrue(app.staticTexts["Spinach"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Spinach"].waitForExistence(timeout: 5))
     }
 
     func testReceiptImportFlow() throws {
@@ -25,7 +25,24 @@ final class PantreeUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["Parsed locally"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Eggs"].exists)
-        XCTAssertTrue(app.staticTexts["Milk"].exists)
+        XCTAssertTrue(app.staticTexts["Whole Milk"].exists)
+    }
+
+    func testReceiptKeyboardCanBeDismissedBeforeSwitchingTabs() throws {
+        let app = launchApp()
+        app.tabBars.buttons["Receipt"].tap()
+        XCTAssertTrue(app.navigationBars["Receipt"].waitForExistence(timeout: 3))
+
+        let editor = app.textViews["ReceiptTextEditor"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        editor.tap()
+
+        let doneButton = app.buttons["DismissReceiptKeyboardButton"]
+        XCTAssertTrue(doneButton.waitForExistence(timeout: 5))
+        doneButton.tap()
+
+        app.tabBars.buttons["Inventory"].tap()
+        XCTAssertTrue(app.navigationBars["Inventory"].waitForExistence(timeout: 5))
     }
 
     func testPhotoPredictionSampleFlow() throws {

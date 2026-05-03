@@ -94,15 +94,25 @@ struct AddFoodView: View {
     @State private var price = ""
     @State private var quantity = ""
     @State private var errorMessage: String?
+    @FocusState private var focusedField: AddFoodField?
+
+    private enum AddFoodField: Hashable {
+        case name
+        case price
+        case quantity
+    }
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("Food") {
                     TextField("Food name", text: $name)
+                        .focused($focusedField, equals: .name)
                     TextField("Price (optional)", text: $price)
+                        .focused($focusedField, equals: .price)
                         .keyboardType(.decimalPad)
                     TextField("Quantity (optional)", text: $quantity)
+                        .focused($focusedField, equals: .quantity)
                         .keyboardType(.decimalPad)
                 }
                 Section("Local prediction") {
@@ -115,6 +125,7 @@ struct AddFoodView: View {
                     Text(errorMessage).foregroundStyle(.red)
                 }
             }
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("Add Food")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -123,6 +134,13 @@ struct AddFoodView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { saveFood() }
                         .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") {
+                        focusedField = nil
+                    }
+                    .accessibilityIdentifier("DismissAddFoodKeyboardButton")
                 }
             }
         }
