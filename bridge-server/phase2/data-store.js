@@ -10,10 +10,11 @@ const fs = require('fs');
 const path = require('path');
 
 const BRIDGE_ROOT = path.join(__dirname, '..');
-const FOODS_FILE = path.join(BRIDGE_ROOT, 'pantree-data.json');
-const EVENTS_FILE = path.join(BRIDGE_ROOT, 'pantree-events.json');
+const FOODS_FILE = process.env.PANTREE_FOODS_FILE || path.join(BRIDGE_ROOT, 'pantree-data.json');
+const EVENTS_FILE = process.env.PANTREE_EVENTS_FILE || path.join(BRIDGE_ROOT, 'pantree-events.json');
 
 function ensureJsonFile(filePath, fallback) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
   if (!fs.existsSync(filePath)) {
     fs.writeFileSync(filePath, JSON.stringify(fallback, null, 2));
   }

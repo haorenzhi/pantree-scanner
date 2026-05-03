@@ -4,7 +4,8 @@
   "description": "Bridge server for Pantree receipt scanner — shared food data API",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node phase2/phase2.test.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
