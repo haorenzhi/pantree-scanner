@@ -1,0 +1,53 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "iOS: Open Pantree in Xcode",
+      "type": "shell",
+      "command": "open Pantree.xcodeproj",
+      "options": {
+        "cwd": "${workspaceFolder}/ios/Pantree"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "iOS: List Devices and Simulators",
+      "type": "shell",
+      "command": "xcrun devicectl list devices; echo '\n--- Simulators ---'; xcrun simctl list devices available | head -80",
+      "options": {
+        "cwd": "${workspaceFolder}/ios/Pantree"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "iOS: Build Simulator",
+      "type": "shell",
+      "command": "xcodebuild build -project Pantree.xcodeproj -scheme Pantree -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2'",
+      "options": {
+        "cwd": "${workspaceFolder}/ios/Pantree"
+      },
+      "group": "build",
+      "problemMatcher": "$gcc"
+    },
+    {
+      "label": "iOS: Test Simulator",
+      "type": "shell",
+      "command": "xcodebuild test -project Pantree.xcodeproj -scheme Pantree -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2'",
+      "options": {
+        "cwd": "${workspaceFolder}/ios/Pantree"
+      },
+      "group": "test",
+      "problemMatcher": "$gcc"
+    },
+    {
+      "label": "iOS: Build Generic Device (requires signing)",
+      "type": "shell",
+      "command": "xcodebuild build -project Pantree.xcodeproj -scheme Pantree -destination 'generic/platform=iOS'",
+      "options": {
+        "cwd": "${workspaceFolder}/ios/Pantree"
+      },
+      "group": "build",
+      "problemMatcher": "$gcc"
+    }
+  ]
+}
