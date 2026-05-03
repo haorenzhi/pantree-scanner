@@ -57,13 +57,21 @@ final class PantreeUITests: XCTestCase {
 
     func testPhotoPredictionSampleFlow() throws {
         let app = launchApp()
-        app.tabBars.buttons["Photo"].tap()
-        XCTAssertTrue(app.navigationBars["Photo"].waitForExistence(timeout: 3))
+        app.tabBars.buttons["Diet"].tap()
+        XCTAssertTrue(app.navigationBars["Diet"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Daily calories"].waitForExistence(timeout: 5))
 
         app.buttons["Use Sample Meal Photo"].tap()
 
-        XCTAssertTrue(app.staticTexts["Predictions"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Meal predictions"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Spinach"].exists)
+        let recordButton = app.buttons["Record Meal Calories"]
+        if !recordButton.waitForExistence(timeout: 2) {
+            app.scrollViews.firstMatch.swipeUp()
+        }
+        XCTAssertTrue(recordButton.waitForExistence(timeout: 5))
+        recordButton.tap()
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Recorded meal")).firstMatch.waitForExistence(timeout: 5))
     }
 
     private func launchApp() -> XCUIApplication {

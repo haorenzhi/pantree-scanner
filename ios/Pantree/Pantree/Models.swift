@@ -235,7 +235,26 @@ struct FoodPrediction: Identifiable, Equatable {
     var foodName: String
     var inventoryItemId: UUID?
     var confidence: Double
+    var estimatedCalories: Double = 0
     var reason: String
+}
+
+struct MealCalorieEntry: Identifiable, Codable, Equatable, Sendable {
+    var id = UUID()
+    var foodName: String
+    var calories: Double
+    var confidence: Double
+}
+
+struct MealCalorieRecord: Identifiable, Codable, Equatable, Sendable {
+    var id = UUID()
+    var createdAt: Date
+    var entries: [MealCalorieEntry]
+    var source: String
+
+    var totalCalories: Double {
+        entries.map(\.calories).reduce(0, +).rounded(toPlaces: 0)
+    }
 }
 
 struct VisionLabel: Equatable, Sendable {

@@ -39,6 +39,7 @@ struct LocalFoodPhotoPredictor: FoodPhotoPredicting, Sendable {
         let matchedItem = inventory.first { item in
             item.canonicalName == profile.canonicalName || LocalFoodKnowledge.normalize(item.name).contains(LocalFoodKnowledge.normalize(label.identifier))
         }
+        let calories = estimatedCalories(profile: profile, matchedItem: matchedItem)
 
         if profile.category == .unknown {
             return inventory
@@ -48,6 +49,7 @@ struct LocalFoodPhotoPredictor: FoodPhotoPredicting, Sendable {
                         foodName: item.name,
                         inventoryItemId: item.id,
                         confidence: min(0.95, label.confidence * 0.75),
+                        estimatedCalories: estimatedCalories(profile: LocalFoodKnowledge.profile(for: item.canonicalName), matchedItem: item),
                         reason: "Matched the camera label to an existing pantry item."
                     )
                 }
@@ -58,11 +60,31 @@ struct LocalFoodPhotoPredictor: FoodPhotoPredicting, Sendable {
                 foodName: profile.canonicalName.titleCasedFoodName,
                 inventoryItemId: matchedItem?.id,
                 confidence: min(0.98, label.confidence * (matchedItem == nil ? 0.82 : 0.95)),
+                estimatedCalories: calories,
                 reason: matchedItem == nil
                     ? "Recognized locally from the static food cache; confirm before logging."
                     : "Recognized locally and matched to current inventory."
             )
         ]
+    }
+
+    private func estimatedCalories(profile: FoodProfile, matchedItem: FoodItem?) -> Double {
+        if let itemCalories = matchedItem?.nutrition.calories, itemCalories > 0 {
+            return itemCalories.rounded(toPlaces: 0)
+        }
+        if profile.nutrition.calories > 0 {
+            return profile.nutrition.calories.rounded(toPlaces: 0)
+        }
+
+        switch profile.category {
+        case .produce: return 70
+        case .protein: return 180
+        case .dairy: return 140
+        case .grain: return 180
+        case .pantry: return 120
+        case .treat: return 220
+        case .unknown: return 180
+        }
     }
 
     private func deduplicate(_ predictions: [FoodPrediction]) -> [FoodPrediction] {

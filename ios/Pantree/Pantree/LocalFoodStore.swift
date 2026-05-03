@@ -4,6 +4,26 @@ import Foundation
 struct PantryStoreSnapshot: Codable, Equatable {
     var items: [FoodItem]
     var events: [FoodEvent]
+    var mealRecords: [MealCalorieRecord]
+
+    init(items: [FoodItem], events: [FoodEvent], mealRecords: [MealCalorieRecord] = []) {
+        self.items = items
+        self.events = events
+        self.mealRecords = mealRecords
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case items
+        case events
+        case mealRecords
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.items = try container.decode([FoodItem].self, forKey: .items)
+        self.events = try container.decode([FoodEvent].self, forKey: .events)
+        self.mealRecords = try container.decodeIfPresent([MealCalorieRecord].self, forKey: .mealRecords) ?? []
+    }
 }
 
 enum LocalFoodStoreError: LocalizedError, Equatable {
@@ -23,6 +43,7 @@ enum LocalFoodStoreError: LocalizedError, Equatable {
 final class LocalFoodStore: ObservableObject {
     @Published private(set) var items: [FoodItem]
     @Published private(set) var events: [FoodEvent]
+    @Published private(set) var mealRecords: [MealCalorieRecord]
 
     let fileURL: URL
     private let encoder: JSONEncoder
@@ -37,6 +58,7 @@ final class LocalFoodStore: ObservableObject {
         self.decoder.dateDecodingStrategy = .iso8601
         self.items = []
         self.events = []
+        self.mealRecords = []
 
         do {
             try load()
@@ -47,6 +69,7 @@ final class LocalFoodStore: ObservableObject {
         } catch {
             items = seedIfEmpty ? SampleData.initialInventory() : []
             events = []
+            mealRecords = []
             try? save()
         }
     }
@@ -118,9 +141,37 @@ final class LocalFoodStore: ObservableObject {
         return items[index]
     }
 
-    func reset(items: [FoodItem] = SampleData.initialInventory(), events: [FoodEvent] = []) throws {
+    @discardableResult
+    func recordMealCalories(from predictions: [FoodPrediction], date: Date = Date(), source: String = "photo") throws -> MealCalorieRecord {
+        let entries = predictions
+            .filter { $0.estimatedCalories > 0 }
+            .map { prediction in
+                MealCalorieEntry(
+                    foodName: prediction.foodName,
+                    calories: prediction.estimatedCalories.rounded(toPlaces: 0),
+                    confidence: prediction.confidence.rounded(toPlaces: 2)
+                )
+            }
+        guard !entries.isEmpty else { throw LocalFoodStoreError.invalidAmount }
+
+        let record = MealCalorieRecord(createdAt: date, entries: entries, source: source)
+        mealRecords.append(record)
+        try save()
+        return record
+    }
+
+    func dailyCalories(on date: Date = Date(), calendar: Calendar = .current) -> Double {
+        mealRecords
+            .filter { calendar.isDate($0.createdAt, inSameDayAs: date) }
+            .map(\.totalCalories)
+            .reduce(0, +)
+            .rounded(toPlaces: 0)
+    }
+
+    func reset(items: [FoodItem] = SampleData.initialInventory(), events: [FoodEvent] = [], mealRecords: [MealCalorieRecord] = []) throws {
         self.items = items
         self.events = events
+        self.mealRecords = mealRecords
         try save()
     }
 
@@ -130,13 +181,14 @@ final class LocalFoodStore: ObservableObject {
         let snapshot = try decoder.decode(PantryStoreSnapshot.self, from: data)
         items = snapshot.items
         events = snapshot.events
+        mealRecords = snapshot.mealRecords
     }
 
     func save() throws {
         do {
             let directory = fileURL.deletingLastPathComponent()
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            let data = try encoder.encode(PantryStoreSnapshot(items: items, events: events))
+            let data = try encoder.encode(PantryStoreSnapshot(items: items, events: events, mealRecords: mealRecords))
             try data.write(to: fileURL, options: [.atomic])
         } catch {
             throw LocalFoodStoreError.persistenceFailed(error.localizedDescription)

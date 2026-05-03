@@ -11,7 +11,7 @@ struct ContentView: View {
             ReceiptScannerView()
                 .tabItem { Label("Receipt", systemImage: "doc.text.viewfinder") }
             FoodPhotoPredictionView()
-                .tabItem { Label("Photo", systemImage: "camera.viewfinder") }
+                .tabItem { Label("Diet", systemImage: "fork.knife.circle.fill") }
         }
         .accessibilityIdentifier("PantreeRoot")
     }

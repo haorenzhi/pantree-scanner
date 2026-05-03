@@ -15,6 +15,7 @@ final class FoodPhotoPredictorTests: XCTestCase {
         XCTAssertEqual(predictions.first?.foodName, "Spinach")
         XCTAssertEqual(predictions.first?.inventoryItemId, inventory[0].id)
         XCTAssertGreaterThan(predictions.first?.confidence ?? 0, 0.8)
+        XCTAssertEqual(predictions.first?.estimatedCalories, 14)
     }
 
     func testPredictorDeduplicatesAndLimitsLowConfidenceLabels() {
@@ -29,5 +30,6 @@ final class FoodPhotoPredictorTests: XCTestCase {
 
         XCTAssertEqual(predictions.count, 1)
         XCTAssertEqual(predictions[0].foodName, "Eggs")
+        XCTAssertEqual(predictions[0].estimatedCalories, 72)
     }
 }
