@@ -1,3 +1,4 @@
+import Charts
 import SwiftUI
 
 struct ContentView: View {
@@ -23,18 +24,67 @@ struct DashboardView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
+            List {
+                Section {
                     PrivacyBanner()
+                }
+                .listRowBackground(Color.clear)
+
+                Section {
                     MetricGrid(summary: summary)
-                    HealthPanel(balance: summary.healthBalance)
-                    RiskPanel(risks: summary.expiryRisks)
+                }
+                .listRowBackground(Color.clear)
+
+                Section {
+                    HealthPanel(summary: summary)
+                }
+                .listRowBackground(Color.clear)
+
+                Section("Eat first") {
+                    if summary.expiryRisks.isEmpty {
+                        Text("No urgent expiration risk right now.")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(summary.expiryRisks.prefix(5)) { risk in
+                            RiskRow(risk: risk)
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    Button {
+                                        _ = try? store.consume(itemId: risk.item.id)
+                                    } label: {
+                                        Label("Ate", systemImage: "fork.knife")
+                                    }
+                                    .tint(.green)
+                                }
+                                .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                                    Button(role: .destructive) {
+                                        _ = try? store.discard(itemId: risk.item.id)
+                                    } label: {
+                                        Label("Discard", systemImage: "trash")
+                                    }
+                                    .tint(.red)
+                                }
+                                .listRowBackground(FoodExpirationStyle.rowBackground(for: risk.item))
+                        }
+                    }
+                }
+
+                Section {
                     ShoppingPanel(suggestions: summary.shoppingSuggestions)
+                }
+                .listRowBackground(Color.clear)
+
+                Section {
                     MealPanel(meals: summary.mealIdeas)
+                }
+                .listRowBackground(Color.clear)
+
+                Section {
                     MLReadinessPanel(notes: summary.mlReadiness)
                 }
-                .padding()
+                .listRowBackground(Color.clear)
             }
+            .listStyle(.insetGrouped)
+            .scrollBounceBehavior(.basedOnSize, axes: .vertical)
             .navigationTitle("Pantree")
         }
     }
@@ -61,8 +111,8 @@ struct MetricGrid: View {
 
     var body: some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-            MetricCard(title: "Active foods", value: "\(summary.activeCount)", detail: "\(summary.totalCount) total")
-            MetricCard(title: "Health score", value: "\(summary.healthBalance.score)", detail: "local heuristic")
+            MetricCard(title: "Expiring soon", value: "\(summary.expiryRisks.count)/\(summary.activeCount)", detail: "foods over active")
+            MetricCard(title: "Health score", value: "\(summary.healthBalance.score)/100", detail: "local heuristic")
             MetricCard(title: "Value at risk", value: summary.valueAtRisk.currencyText, detail: "expiring soon")
             MetricCard(title: "Inventory value", value: summary.totalEstimatedValue.currencyText, detail: "remaining estimate")
         }
@@ -87,13 +137,38 @@ struct MetricCard: View {
 }
 
 struct HealthPanel: View {
-    var balance: HealthBalance
+    var summary: PantrySummary
+
+    var balance: HealthBalance { summary.healthBalance }
+
+    var slices: [CategorySlice] {
+        FoodCategory.allCases.compactMap { category in
+            let count = summary.categoryCounts[category, default: 0]
+            guard count > 0 else { return nil }
+            return CategorySlice(category: category, count: count)
+        }
+    }
 
     var body: some View {
         Panel(title: "Diet balance") {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Produce \((balance.produceShare * 100).rounded(toPlaces: 0), specifier: "%.0f")% · Protein \((balance.proteinShare * 100).rounded(toPlaces: 0), specifier: "%.0f")% · Treats \((balance.treatShare * 100).rounded(toPlaces: 0), specifier: "%.0f")%")
-                    .font(.subheadline)
+                if slices.isEmpty {
+                    Text("Add food to see an inventory category chart.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    CategoryPieChart(slices: slices)
+                        .frame(height: 190)
+                        .accessibilityIdentifier("DietBalancePieChart")
+
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: 6) {
+                        ForEach(slices) { slice in
+                            Label("\(slice.category.title): \(slice.count)", systemImage: "circle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
                 ForEach(balance.insights, id: \.self) { insight in
                     Label(insight, systemImage: "leaf.fill")
                         .font(.caption)
@@ -104,46 +179,86 @@ struct HealthPanel: View {
     }
 }
 
-struct RiskPanel: View {
-    @EnvironmentObject private var store: LocalFoodStore
-    var risks: [ExpiryRisk]
+struct CategorySlice: Identifiable {
+    var category: FoodCategory
+    var count: Int
+
+    var id: FoodCategory { category }
+}
+
+struct CategoryPieChart: View {
+    var slices: [CategorySlice]
 
     var body: some View {
-        Panel(title: "Eat first") {
-            if risks.isEmpty {
-                Text("No urgent expiration risk right now.")
-                    .foregroundStyle(.secondary)
-            } else {
-                VStack(spacing: 10) {
-                    ForEach(risks.prefix(5)) { risk in
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                FoodIconBadge(item: risk.item)
-                                VStack(alignment: .leading) {
-                                    Text(risk.item.name).font(.headline)
-                                    Text(risk.reason).font(.caption).foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                Text("\(risk.score)")
-                                    .font(.headline.monospacedDigit())
-                            }
-                            HStack {
-                                Button("Ate") { _ = try? store.consume(itemId: risk.item.id) }
-                                    .buttonStyle(.borderedProminent)
-                                Button("Discard") { _ = try? store.discard(itemId: risk.item.id) }
-                                    .buttonStyle(.bordered)
-                                Spacer()
-                                if let value = risk.valueAtRisk {
-                                    Text(value.currencyText).font(.caption).foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                        .padding()
-                        .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
-                    }
+        Chart(slices) { slice in
+            SectorMark(
+                angle: .value("Foods", slice.count),
+                innerRadius: .ratio(0.58),
+                angularInset: 1.5
+            )
+            .foregroundStyle(by: .value("Category", slice.category.title))
+        }
+        .chartLegend(position: .bottom, alignment: .center)
+    }
+}
+
+struct RiskRow: View {
+    var risk: ExpiryRisk
+
+    private var expirationText: String {
+        if risk.daysLeft < 0 {
+            let days = abs(risk.daysLeft)
+            return "Expired \(days) day\(days == 1 ? "" : "s") ago"
+        }
+        if risk.daysLeft == 0 {
+            return "Expires today"
+        }
+        return "Expiring in \(risk.daysLeft) day\(risk.daysLeft == 1 ? "" : "s")"
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            FoodIconBadge(item: risk.item)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(risk.item.name).font(.headline)
+                Text(risk.reason).font(.caption).foregroundStyle(.secondary)
+                if let value = risk.valueAtRisk {
+                    Text("Value at risk: \(value.currencyText)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
             }
+            Spacer()
+            Text(expirationText)
+                .font(.caption.bold())
+                .multilineTextAlignment(.trailing)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .background(.orange.opacity(0.16), in: Capsule())
+                .accessibilityIdentifier("RiskExpirationLabel")
         }
+        .padding(.vertical, 5)
+    }
+}
+
+enum FoodExpirationStyle {
+    static func rowBackground(for item: FoodItem, on date: Date = Date(), calendar: Calendar = .current) -> Color {
+        guard item.isActive else { return Color.clear }
+        let daysLeft = item.daysUntilExpiration(on: date, calendar: calendar)
+
+        if daysLeft < 0 {
+            return Color.red.opacity(0.22)
+        }
+        if daysLeft <= 1 {
+            return Color.red.opacity(0.18)
+        }
+        if daysLeft <= 3 {
+            return Color.red.opacity(0.12)
+        }
+        if daysLeft <= 5 {
+            return Color.orange.opacity(0.10)
+        }
+        return Color.clear
     }
 }
 

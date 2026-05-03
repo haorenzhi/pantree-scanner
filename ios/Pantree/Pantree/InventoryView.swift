@@ -3,35 +3,28 @@ import SwiftUI
 struct InventoryView: View {
     @EnvironmentObject private var store: LocalFoodStore
     @State private var showingAddFood = false
+    @State private var collapsedSections: Set<StorageSection> = [.used]
+
+    private var activeItems: [FoodItem] {
+        store.items.filter(\.isActive)
+    }
+
+    private var usedFoods: [FoodItem] {
+        store.items.filter { $0.section == .used || !$0.isActive }
+    }
+
+    private var activeSections: [StorageSection] {
+        StorageSection.allCases.filter { $0 != .used }
+    }
+
+    private var historyListHeight: CGFloat {
+        let rowCount = collapsedSections.contains(.used) ? 0 : min(usedFoods.count, 8)
+        return min(360, CGFloat(96 + rowCount * 72))
+    }
 
     var body: some View {
         NavigationStack {
-            List {
-                ForEach(StorageSection.allCases.filter { $0 != .used }) { section in
-                    let foods = store.items.filter { $0.section == section && $0.isActive }
-                    if !foods.isEmpty {
-                        Section(section.title) {
-                            ForEach(foods) { item in
-                                FoodItemRow(item: item)
-                            }
-                        }
-                    }
-                }
-
-                let usedFoods = store.items.filter { $0.section == .used || !$0.isActive }
-                if !usedFoods.isEmpty {
-                    Section("Used / history") {
-                        ForEach(usedFoods.prefix(8)) { item in
-                            FoodItemRow(item: item, showActions: false)
-                        }
-                    }
-                }
-            }
-            .overlay {
-                if store.items.filter(\.isActive).isEmpty {
-                    ContentUnavailableView("No active foods", systemImage: "refrigerator", description: Text("Add food manually or import a receipt."))
-                }
-            }
+            inventoryContent
             .navigationTitle("Inventory")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -47,6 +40,105 @@ struct InventoryView: View {
             }
         }
     }
+
+    @ViewBuilder
+    private var inventoryContent: some View {
+        if activeItems.isEmpty {
+            VStack(spacing: 0) {
+                ContentUnavailableView("No active foods", systemImage: "refrigerator", description: Text("Add food manually or import a receipt."))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                if !usedFoods.isEmpty {
+                    List {
+                        usedHistorySection
+                    }
+                    .listStyle(.insetGrouped)
+                    .frame(height: historyListHeight)
+                }
+            }
+        } else {
+            List {
+                ForEach(activeSections) { section in
+                    let foods = activeItems.filter { $0.section == section }
+                    if !foods.isEmpty {
+                        activeFoodSection(section, foods: foods)
+                    }
+                }
+
+                usedHistorySection
+            }
+            .listStyle(.insetGrouped)
+        }
+    }
+
+    @ViewBuilder
+    private func activeFoodSection(_ section: StorageSection, foods: [FoodItem]) -> some View {
+        Section {
+            if !collapsedSections.contains(section) {
+                ForEach(foods) { item in
+                    FoodItemRow(item: item)
+                        .listRowBackground(FoodExpirationStyle.rowBackground(for: item))
+                }
+            }
+        } header: {
+            CollapsibleSectionHeader(title: section.title, count: foods.count, isCollapsed: collapsedSections.contains(section)) {
+                toggle(section)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var usedHistorySection: some View {
+        if !usedFoods.isEmpty {
+            Section {
+                if !collapsedSections.contains(.used) {
+                    ForEach(usedFoods.prefix(8)) { item in
+                        FoodItemRow(item: item, showActions: false)
+                            .listRowBackground(Color.clear)
+                    }
+                }
+            } header: {
+                CollapsibleSectionHeader(title: "Used / history", count: usedFoods.count, isCollapsed: collapsedSections.contains(.used)) {
+                    toggle(.used)
+                }
+            }
+        }
+    }
+
+    private func toggle(_ section: StorageSection) {
+        if collapsedSections.contains(section) {
+            collapsedSections.remove(section)
+        } else {
+            collapsedSections.insert(section)
+        }
+    }
+}
+
+struct CollapsibleSectionHeader: View {
+    var title: String
+    var count: Int
+    var isCollapsed: Bool
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack {
+                Text(title)
+                    .font(.caption.bold())
+                Text("\(count)")
+                    .font(.caption2.bold())
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(.secondary.opacity(0.12), in: Capsule())
+                Spacer()
+                Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
+                    .font(.caption.bold())
+            }
+            .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("InventorySectionHeader-\(title.replacingOccurrences(of: " ", with: "-"))")
+    }
 }
 
 struct FoodItemRow: View {
@@ -55,6 +147,32 @@ struct FoodItemRow: View {
     var showActions = true
 
     var body: some View {
+        rowContent
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
+            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                if showActions {
+                    Button {
+                        _ = try? store.consume(itemId: item.id)
+                    } label: {
+                        Label("Ate", systemImage: "fork.knife")
+                    }
+                    .tint(.green)
+                }
+            }
+            .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                if showActions {
+                    Button(role: .destructive) {
+                        _ = try? store.discard(itemId: item.id)
+                    } label: {
+                        Label("Discard", systemImage: "trash")
+                    }
+                    .tint(.red)
+                }
+            }
+    }
+
+    private var rowContent: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 FoodIconBadge(item: item)
@@ -74,17 +192,15 @@ struct FoodItemRow: View {
             }
             if showActions {
                 HStack {
-                    Button("Ate") { _ = try? store.consume(itemId: item.id) }
-                        .buttonStyle(.borderedProminent)
                     Button("Open") { _ = try? store.markOpened(itemId: item.id) }
                         .buttonStyle(.bordered)
-                    Button("Discard") { _ = try? store.discard(itemId: item.id) }
-                        .buttonStyle(.bordered)
+                    Text("Swipe left to eat · swipe right to discard")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
                 .font(.caption)
             }
         }
-        .padding(.vertical, 4)
     }
 }
 
