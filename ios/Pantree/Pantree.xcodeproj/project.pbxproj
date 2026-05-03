@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 60;
+	objectVersion = 56;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -76,9 +76,27 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		A00600000000000000000001 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
-		A00600000000000000000002 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
-		A00600000000000000000003 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		A00600000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A00600000000000000000002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A00600000000000000000003 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -156,8 +174,10 @@
 				A00600000000000000000001 /* Frameworks */,
 				A00800000000000000000002 /* Resources */,
 			);
-			buildRules = ();
-			dependencies = ();
+			buildRules = (
+			);
+			dependencies = (
+			);
 			name = Pantree;
 			productName = Pantree;
 			productReference = A00200000000000000000041 /* Pantree.app */;
@@ -171,7 +191,8 @@
 				A00600000000000000000002 /* Frameworks */,
 				A00800000000000000000004 /* Resources */,
 			);
-			buildRules = ();
+			buildRules = (
+			);
 			dependencies = (
 				A00A00000000000000000001 /* PBXTargetDependency */,
 			);
@@ -188,7 +209,8 @@
 				A00600000000000000000003 /* Frameworks */,
 				A00800000000000000000006 /* Resources */,
 			);
-			buildRules = ();
+			buildRules = (
+			);
 			dependencies = (
 				A00A00000000000000000002 /* PBXTargetDependency */,
 			);
@@ -207,9 +229,17 @@
 				LastSwiftUpdateCheck = 2620;
 				LastUpgradeCheck = 2620;
 				TargetAttributes = {
-					A00500000000000000000001 = {CreatedOnToolsVersion = 26.2; };
-					A00500000000000000000002 = {CreatedOnToolsVersion = 26.2; TestTargetID = A00500000000000000000001; };
-					A00500000000000000000003 = {CreatedOnToolsVersion = 26.2; TestTargetID = A00500000000000000000001; };
+					A00500000000000000000001 = {
+						CreatedOnToolsVersion = 26.2;
+					};
+					A00500000000000000000002 = {
+						CreatedOnToolsVersion = 26.2;
+						TestTargetID = A00500000000000000000001;
+					};
+					A00500000000000000000003 = {
+						CreatedOnToolsVersion = 26.2;
+						TestTargetID = A00500000000000000000001;
+					};
 				};
 			};
 			buildConfigurationList = A00900000000000000000001 /* Build configuration list for PBXProject "Pantree" */;
@@ -233,9 +263,27 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		A00800000000000000000002 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
-		A00800000000000000000004 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
-		A00800000000000000000006 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		A00800000000000000000002 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A00800000000000000000004 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A00800000000000000000006 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -284,8 +332,16 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		A00A00000000000000000001 /* PBXTargetDependency */ = {isa = PBXTargetDependency; target = A00500000000000000000001 /* Pantree */; targetProxy = A00300000000000000000001 /* PBXContainerItemProxy */; };
-		A00A00000000000000000002 /* PBXTargetDependency */ = {isa = PBXTargetDependency; target = A00500000000000000000001 /* Pantree */; targetProxy = A00300000000000000000002 /* PBXContainerItemProxy */; };
+		A00A00000000000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A00500000000000000000001 /* Pantree */;
+			targetProxy = A00300000000000000000001 /* PBXContainerItemProxy */;
+		};
+		A00A00000000000000000002 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A00500000000000000000001 /* Pantree */;
+			targetProxy = A00300000000000000000002 /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
@@ -354,7 +410,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = GK6A4ZPSGC;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Pantree/Info.plist;
@@ -379,7 +435,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = GK6A4ZPSGC;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Pantree/Info.plist;
@@ -488,10 +544,42 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		A00900000000000000000001 /* Build configuration list for PBXProject "Pantree" */ = {isa = XCConfigurationList; buildConfigurations = (A00B00000000000000000001 /* Debug */, A00B00000000000000000002 /* Release */); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
-		A00900000000000000000011 /* Build configuration list for PBXNativeTarget "Pantree" */ = {isa = XCConfigurationList; buildConfigurations = (A00B00000000000000000011 /* Debug */, A00B00000000000000000012 /* Release */); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
-		A00900000000000000000021 /* Build configuration list for PBXNativeTarget "PantreeTests" */ = {isa = XCConfigurationList; buildConfigurations = (A00B00000000000000000021 /* Debug */, A00B00000000000000000022 /* Release */); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
-		A00900000000000000000031 /* Build configuration list for PBXNativeTarget "PantreeUITests" */ = {isa = XCConfigurationList; buildConfigurations = (A00B00000000000000000031 /* Debug */, A00B00000000000000000032 /* Release */); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		A00900000000000000000001 /* Build configuration list for PBXProject "Pantree" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A00B00000000000000000001 /* Debug */,
+				A00B00000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A00900000000000000000011 /* Build configuration list for PBXNativeTarget "Pantree" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A00B00000000000000000011 /* Debug */,
+				A00B00000000000000000012 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A00900000000000000000021 /* Build configuration list for PBXNativeTarget "PantreeTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A00B00000000000000000021 /* Debug */,
+				A00B00000000000000000022 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A00900000000000000000031 /* Build configuration list for PBXNativeTarget "PantreeUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A00B00000000000000000031 /* Debug */,
+				A00B00000000000000000032 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 	};
 	rootObject = A00400000000000000000001 /* Project object */;

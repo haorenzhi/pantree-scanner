@@ -18,6 +18,7 @@ final class PantreeUITests: XCTestCase {
         let app = launchApp()
         app.tabBars.buttons["Receipt"].tap()
         XCTAssertTrue(app.navigationBars["Receipt"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["Choose Receipt Photo"].exists)
 
         app.buttons["Use Sample Receipt"].tap()
         app.buttons["Import Receipt"].tap()

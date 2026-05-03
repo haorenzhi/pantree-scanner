@@ -33,4 +33,16 @@ final class ReceiptParserTests: XCTestCase {
         XCTAssertTrue(result.items.isEmpty)
         XCTAssertEqual(result.ignoredLines.count, 4)
     }
+
+    func testReceiptPhotoOCRTextNormalization() {
+        let text = ReceiptImageTextRecognizer.normalizedOCRText("""
+
+             EGGS 4.99
+
+          MILK $3.99   
+        
+        """)
+
+        XCTAssertEqual(text, "EGGS 4.99\nMILK $3.99")
+    }
 }
