@@ -96,6 +96,7 @@ struct PredictionPanel: View {
                 ForEach(predictions) { prediction in
                     VStack(alignment: .leading, spacing: 7) {
                         HStack {
+                            FoodIconBadge(name: prediction.foodName)
                             Text(prediction.foodName).font(.headline)
                             Spacer()
                             Text("\((prediction.confidence * 100).rounded(toPlaces: 0), specifier: "%.0f")%")

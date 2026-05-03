@@ -324,6 +324,7 @@ struct ParsedReceiptPanel: View {
                         HStack {
                             Image(systemName: selectedItemIDs.contains(item.id) ? "checkmark.circle.fill" : "circle")
                                 .foregroundStyle(selectedItemIDs.contains(item.id) ? .green : .secondary)
+                            FoodIconBadge(item: item)
                             VStack(alignment: .leading) {
                                 Text(item.name)
                                 Text("\(item.category.title) · expires \(item.expDate, format: .dateTime.month().day())")

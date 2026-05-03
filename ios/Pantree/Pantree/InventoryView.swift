@@ -57,6 +57,7 @@ struct FoodItemRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
+                FoodIconBadge(item: item)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(item.name).font(.headline)
                     Text("\(item.category.title) · \(item.remainingQty.cleanText) / \(item.quantity.cleanText) \(item.unit)")
@@ -117,6 +118,9 @@ struct AddFoodView: View {
                 }
                 Section("Local prediction") {
                     let profile = LocalFoodKnowledge.profile(for: name)
+                    LabeledContent("Icon") {
+                        FoodIconBadge(name: name)
+                    }
                     LabeledContent("Category", value: profile.category.title)
                     LabeledContent("Default storage", value: profile.section.title)
                     LabeledContent("Predicted shelf life", value: "\(profile.shelfLifeDays) days")

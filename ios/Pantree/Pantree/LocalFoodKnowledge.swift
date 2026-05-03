@@ -47,6 +47,101 @@ enum LocalFoodKnowledge {
         LocalRecipe(id: "toast-eggs-fruit", name: "Toast, Eggs, and Fruit", ingredients: ["bread", "eggs", "apples"], minutes: 10, healthGoal: "simple breakfast")
     ]
 
+    private static let defaultIcon = "🍽️"
+
+    private static let foodEmojiMap: [String: String] = [
+        "apples": "🍎", "apple": "🍎", "bananas": "🍌", "banana": "🍌",
+        "blueberries": "🫐", "blueberry": "🫐", "strawberries": "🍓", "strawberry": "🍓",
+        "raspberries": "🍓", "raspberry": "🍓", "grapes": "🍇", "grape": "🍇",
+        "cherries": "🍒", "cherry": "🍒", "lemon": "🍋", "lime": "🍋",
+        "oranges": "🍊", "orange": "🍊", "grapefruit": "🍊", "pears": "🍐", "pear": "🍐",
+        "peaches": "🍑", "peach": "🍑", "nectarines": "🍑", "nectarine": "🍑",
+        "plums": "🍑", "plum": "🍑", "kiwi": "🥝", "melons": "🍈", "melon": "🍈",
+        "watermelon": "🍉", "pineapple": "🍍", "mangos": "🥭", "mango": "🥭",
+        "papaya": "🥭", "avocados": "🥑", "avocado": "🥑", "coconut": "🥥",
+        "broccoli": "🥦", "cauliflower": "🥦", "carrots": "🥕", "carrot": "🥕",
+        "corn": "🌽", "lettuce": "🥬", "romaine": "🥬", "spinach": "🥬", "kale": "🥬",
+        "arugula": "🥬", "cabbage": "🥬", "tomatoes": "🍅", "tomato": "🍅",
+        "potatoes": "🥔", "potato": "🥔", "sweet potato": "🍠", "onions": "🧅", "onion": "🧅",
+        "garlic": "🧄", "ginger": "🫚", "peppers": "🌶️", "pepper": "🌶️",
+        "mushrooms": "🍄", "mushroom": "🍄", "cucumbers": "🥒", "cucumber": "🥒",
+        "eggplant": "🍆", "celery": "🥬", "asparagus": "🥬", "squash": "🥒", "zucchini": "🥒",
+        "bok choy": "🥬", "brussel sprouts": "🥬", "green beans": "🫘", "okra": "🥬",
+        "radishes": "🥬", "beets": "🥬", "artichokes": "🥬", "cilantro": "🌿", "chives": "🌿",
+        "chicken": "🍗", "fried chicken": "🍗", "turkey": "🦃", "beef": "🥩",
+        "steak": "🥩", "ground beef": "🥩", "bacon": "🥓", "pork": "🥩", "ground pork": "🥩",
+        "ground turkey": "🥩", "lamb": "🥩", "lamb chop": "🥩", "ham": "🍖", "sausage": "🌭", "deli": "🥩",
+        "salmon": "🐟", "tilapia": "🐟", "bass": "🐟", "tuna": "🐟", "cod": "🐟", "trout": "🐟",
+        "shrimp": "🦐", "lobster": "🦞", "crab": "🦀", "scallops": "🐚", "squid": "🦑",
+        "mussels": "🐚", "oysters": "🦪", "shellfish": "🐚", "clams": "🐚",
+        "milk": "🥛", "almond milk": "🥛", "oat milk": "🥛", "eggs": "🥚", "egg": "🥚",
+        "butter": "🧈", "cheese": "🧀", "cream cheese": "🧀", "cottage cheese": "🧀",
+        "ricotta cheese": "🧀", "yogurt": "🥛", "sour cream": "🥛", "heavy cream": "🥛",
+        "cream": "🥛", "half-and-half": "🥛", "juice": "🧃", "orange juice": "🍊",
+        "apple juice": "🧃", "mango juice": "🧃", "water": "💧", "tea": "🍵", "coffee": "☕",
+        "beer": "🍺", "wine": "🍷", "lemonade": "🍋", "smoothie": "🥤", "soda": "🥤",
+        "tofu": "🥡", "tempeh": "🥡", "miso": "🥣", "guacamole": "🥑", "hummus": "🫙",
+        "sandwich": "🥪", "burrito": "🌯", "soup": "🥣", "bread": "🍞", "bagels": "🥯",
+        "bagel": "🥯", "tortillas": "🫓", "pancakes": "🥞", "waffles": "🧇",
+        "rice": "🍚", "pasta": "🍝", "noodles": "🍜", "beans": "🫘", "cereal": "🥣",
+        "flour": "🌾", "sugar": "🍬", "ketchup": "🍅", "mustard": "🟡", "mayonnaise": "🥫",
+        "salsa": "🫙", "soy sauce": "🫙", "vinegar": "🫙", "olive oil": "🫒",
+        "maple syrup": "🍁", "chocolate syrup": "🍫", "honey": "🍯", "peanut butter": "🥜", "jam": "🫙",
+        "ice cream": "🍦", "chocolate": "🍫", "cookie": "🍪", "cookies": "🍪", "cake": "🍰",
+        "cheesecake": "🍰", "pie": "🥧", "donut": "🍩", "muffin": "🧁", "pizza": "🍕",
+        "sushi": "🍣", "taco": "🌮", "hot dog": "🌭", "popcorn": "🍿"
+    ]
+
+    private static let categoryIcons: [FoodCategory: String] = [
+        .produce: "🥬",
+        .protein: "🥩",
+        .dairy: "🥛",
+        .grain: "🍚",
+        .pantry: "🫙",
+        .treat: "🍪"
+    ]
+
+    static func icon(for item: FoodItem) -> String {
+        if let icon = resolveIcon(forNormalizedName: normalize(item.canonicalName)) {
+            return icon
+        }
+        if let icon = resolveIcon(forNormalizedName: normalize(item.name)) {
+            return icon
+        }
+        return categoryIcons[item.category] ?? defaultIcon
+    }
+
+    static func icon(for name: String) -> String {
+        if let icon = resolveIcon(forNormalizedName: normalize(name)) {
+            return icon
+        }
+
+        let profile = profile(for: name)
+        if profile.category != .unknown {
+            if let icon = resolveIcon(forNormalizedName: normalize(profile.canonicalName)) {
+                return icon
+            }
+            return categoryIcons[profile.category] ?? defaultIcon
+        }
+
+        return defaultIcon
+    }
+
+    private static func resolveIcon(forNormalizedName normalized: String) -> String? {
+        guard !normalized.isEmpty else { return nil }
+        if let exact = foodEmojiMap[normalized] {
+            return exact
+        }
+
+        for key in foodEmojiMap.keys.sorted(by: { $0.count > $1.count }) {
+            if normalized.contains(key) || key.contains(normalized) {
+                return foodEmojiMap[key]
+            }
+        }
+
+        return nil
+    }
+
     static func normalize(_ text: String) -> String {
         text
             .lowercased()
@@ -117,6 +212,12 @@ enum LocalFoodKnowledge {
             confidence: profile.category == .unknown ? 0.45 : 0.9,
             nutrition: profile.nutrition
         )
+    }
+}
+
+extension FoodItem {
+    var icon: String {
+        LocalFoodKnowledge.icon(for: self)
     }
 }
 

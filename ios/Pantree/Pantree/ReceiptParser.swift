@@ -253,6 +253,8 @@ struct ReceiptParser: Sendable {
             #"\b(NET\s*SALES|SOLD\s*ITEMS|SOLD\s*ITEM)\b"#,
             #"\b(MID|TID|TERMINAL|AUTH|APPROVAL|SEQUENCE)\b"#,
             #"\b(MARKET|FOODS|GROCERY|SUPERMRKT|SUPERMARKET)\b"#,
+            #"\b(WHOLE\s*FOODS?|WHOLEFOODS)\b"#,
+            #"^WHOLE\.?$"#,
             #"^F?CODS\.?$"#,
             #"BRYANT\s*PARK|BPK$"#,
             #"^[A-Z]{2,}PARK"#,

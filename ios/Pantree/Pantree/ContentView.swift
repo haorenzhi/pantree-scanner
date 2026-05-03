@@ -118,6 +118,7 @@ struct RiskPanel: View {
                     ForEach(risks.prefix(5)) { risk in
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
+                                FoodIconBadge(item: risk.item)
                                 VStack(alignment: .leading) {
                                     Text(risk.item.name).font(.headline)
                                     Text(risk.reason).font(.caption).foregroundStyle(.secondary)
@@ -156,11 +157,14 @@ struct ShoppingPanel: View {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(suggestions) { suggestion in
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(suggestion.name).font(.headline)
-                        Text("\(suggestion.priority.capitalized) priority · \(suggestion.reason)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    HStack(alignment: .top, spacing: 10) {
+                        FoodIconBadge(name: suggestion.name)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(suggestion.name).font(.headline)
+                            Text("\(suggestion.priority.capitalized) priority · \(suggestion.reason)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, 4)
@@ -233,6 +237,35 @@ struct Panel<Content: View>: View {
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
+    }
+}
+
+struct FoodIconBadge: View {
+    var icon: String
+    var label: String
+    var identifier: String
+
+    init(item: FoodItem) {
+        self.icon = item.icon
+        self.label = item.name
+        self.identifier = "FoodIcon-\(item.canonicalName)"
+    }
+
+    init(name: String) {
+        let normalizedName = LocalFoodKnowledge.normalize(name)
+            .replacingOccurrences(of: " ", with: "-")
+        self.icon = LocalFoodKnowledge.icon(for: name)
+        self.label = name.isEmpty ? "Food" : name
+        self.identifier = "FoodIcon-\(normalizedName.isEmpty ? "unknown" : normalizedName)"
+    }
+
+    var body: some View {
+        Text(icon)
+            .font(.title3)
+            .frame(width: 36, height: 36)
+            .background(.green.opacity(0.12), in: Circle())
+            .accessibilityLabel("\(label) icon")
+            .accessibilityIdentifier(identifier)
     }
 }
 

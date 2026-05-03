@@ -22,6 +22,22 @@ final class FoodKnowledgeTests: XCTestCase {
         XCTAssertEqual(profile.canonicalName, "whole")
     }
 
+    func testFoodIconsUseLocalBridgeEmojiLogic() {
+        XCTAssertEqual(LocalFoodKnowledge.icon(for: "Whole Milk"), "🥛")
+        XCTAssertEqual(LocalFoodKnowledge.icon(for: "OVF OG LG EGGS"), "🥚")
+        XCTAssertEqual(LocalFoodKnowledge.icon(for: "Chunky Salsa"), "🫙")
+        XCTAssertEqual(LocalFoodKnowledge.icon(for: "Salted Corn Chips"), "🌽")
+    }
+
+    func testFoodItemIconUsesCanonicalThenDisplayNameThenDefault() {
+        var item = LocalFoodKnowledge.makeFoodItem(name: "Salted Corn Chips", source: "unit-test")
+        item.canonicalName = "chips"
+        XCTAssertEqual(item.icon, "🌽")
+
+        XCTAssertEqual(LocalFoodKnowledge.icon(for: "Whole"), "🍽️")
+        XCTAssertEqual(LocalFoodKnowledge.icon(for: "dragon fruit crisps"), "🍽️")
+    }
+
     func testFoodItemComputesExpirationAndRemainingValue() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
