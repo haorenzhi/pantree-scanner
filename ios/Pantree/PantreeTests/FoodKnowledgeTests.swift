@@ -16,6 +16,12 @@ final class FoodKnowledgeTests: XCTestCase {
         XCTAssertEqual(item.source, "unit-test")
     }
 
+    func testGenericModifiersDoNotReverseMatchFoodAliases() {
+        let profile = LocalFoodKnowledge.profile(for: "Whole")
+        XCTAssertEqual(profile.category, .unknown)
+        XCTAssertEqual(profile.canonicalName, "whole")
+    }
+
     func testFoodItemComputesExpirationAndRemainingValue() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!

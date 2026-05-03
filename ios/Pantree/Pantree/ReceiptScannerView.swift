@@ -11,7 +11,8 @@ struct ReceiptScannerView: View {
     @EnvironmentObject private var store: LocalFoodStore
     @State private var receiptText = ""
     @State private var parseResult: ReceiptParseResult?
-    @State private var importedNames: [String] = []
+    @State private var selectedDetectedItemIDs: Set<UUID> = []
+    @State private var importedItemIDs: Set<UUID> = []
     @State private var errorMessage: String?
     @State private var photoImportMessage: String?
     @State private var showingCameraScanner = false
@@ -33,8 +34,7 @@ struct ReceiptScannerView: View {
                         Button("Use Sample Receipt") {
                             isReceiptTextFocused = false
                             receiptText = SampleData.sampleReceipt
-                            parseResult = nil
-                            importedNames = []
+                            detectReceiptItems(from: SampleData.sampleReceipt, showErrorForEmpty: true)
                             photoImportMessage = nil
                         }
                         .buttonStyle(.bordered)
@@ -68,13 +68,26 @@ struct ReceiptScannerView: View {
                         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
                         .accessibilityIdentifier("ReceiptTextEditor")
 
-                    Button("Import Receipt") { importReceipt() }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(receiptText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        .accessibilityIdentifier("ImportReceiptButton")
+                    Button("Refresh Detected Items") {
+                        detectReceiptItems(showErrorForEmpty: true)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(receiptText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .accessibilityIdentifier("DetectReceiptItemsButton")
 
                     if let parseResult {
-                        ParsedReceiptPanel(result: parseResult, importedNames: importedNames)
+                        ParsedReceiptPanel(
+                            result: parseResult,
+                            selectedItemIDs: $selectedDetectedItemIDs,
+                            importedItemIDs: importedItemIDs
+                        )
+
+                        Button(addSelectedButtonTitle(for: parseResult)) {
+                            addSelectedItemsToInventory()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(selectedUnimportedItems(from: parseResult).isEmpty)
+                        .accessibilityIdentifier("AddSelectedReceiptItemsButton")
                     }
 
                     if let photoImportMessage {
@@ -102,6 +115,9 @@ struct ReceiptScannerView: View {
             }
             .sheet(isPresented: $showingCameraScanner) {
                 cameraScannerSheet
+            }
+            .onChange(of: receiptText) { _, newText in
+                detectReceiptItems(from: newText)
             }
         }
     }
@@ -140,21 +156,59 @@ struct ReceiptScannerView: View {
         #endif
     }
 
-    private func importReceipt() {
-        isReceiptTextFocused = false
-        let result = parser.parse(receiptText)
-        parseResult = result
-        guard !result.items.isEmpty else {
-            errorMessage = "No grocery items were found in this receipt text."
+    private func detectReceiptItems(from text: String? = nil, showErrorForEmpty: Bool = false) {
+        let sourceText = text ?? receiptText
+        let trimmed = sourceText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            parseResult = nil
+            selectedDetectedItemIDs = []
+            importedItemIDs = []
+            if showErrorForEmpty {
+                errorMessage = "Paste or scan receipt text first."
+            }
             return
         }
+
+        let result = parser.parse(trimmed)
+        parseResult = result
+        selectedDetectedItemIDs = Set(result.items.map(\.id))
+        importedItemIDs = []
+
+        if result.items.isEmpty, showErrorForEmpty {
+            errorMessage = "No grocery items were found in this receipt text."
+        } else {
+            errorMessage = nil
+        }
+    }
+
+    private func addSelectedItemsToInventory() {
+        isReceiptTextFocused = false
+        guard let parseResult else { return }
+
+        let selectedItems = selectedUnimportedItems(from: parseResult)
+        guard !selectedItems.isEmpty else {
+            errorMessage = "Select at least one detected item to add."
+            return
+        }
+
         do {
-            let imported = try store.importReceipt(result)
-            importedNames = imported.map(\.name)
+            let selectedResult = ReceiptParseResult(receiptId: parseResult.receiptId, items: selectedItems, ignoredLines: parseResult.ignoredLines)
+            let imported = try store.importReceipt(selectedResult)
+            importedItemIDs.formUnion(imported.map(\.id))
+            photoImportMessage = "Added \(imported.count) selected item\(imported.count == 1 ? "" : "s") to inventory."
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func selectedUnimportedItems(from result: ReceiptParseResult) -> [FoodItem] {
+        result.items.filter { selectedDetectedItemIDs.contains($0.id) && !importedItemIDs.contains($0.id) }
+    }
+
+    private func addSelectedButtonTitle(for result: ReceiptParseResult) -> String {
+        let count = selectedUnimportedItems(from: result).count
+        return "Add \(count) Selected Item\(count == 1 ? "" : "s") to Inventory"
     }
 
     private func recognizeReceiptPhoto(_ item: PhotosPickerItem) {
@@ -179,9 +233,8 @@ struct ReceiptScannerView: View {
                         return
                     }
                     receiptText = recognizedText
-                    parseResult = nil
-                    importedNames = []
-                    photoImportMessage = "Loaded receipt text from photo locally. Review before importing."
+                    detectReceiptItems(from: recognizedText)
+                    photoImportMessage = "Loaded receipt text from photo locally. Review detected items before adding."
                 }
             } catch {
                 await MainActor.run {
@@ -253,26 +306,39 @@ struct ReceiptImageTextRecognizer: Sendable {
 
 struct ParsedReceiptPanel: View {
     var result: ReceiptParseResult
-    var importedNames: [String]
+    @Binding var selectedItemIDs: Set<UUID>
+    var importedItemIDs: Set<UUID>
 
     var body: some View {
         Panel(title: "Parsed locally") {
             VStack(alignment: .leading, spacing: 8) {
                 Text("\(result.items.count) food item\(result.items.count == 1 ? "" : "s") detected")
                     .font(.headline)
+                Text("Uncheck anything that is not food before adding to inventory.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 ForEach(result.items) { item in
-                    HStack {
-                        VStack(alignment: .leading) {
-                            Text(item.name)
-                            Text("\(item.category.title) · expires \(item.expDate, format: .dateTime.month().day())")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        if importedNames.contains(item.name) {
-                            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                    Button {
+                        toggleSelection(for: item)
+                    } label: {
+                        HStack {
+                            Image(systemName: selectedItemIDs.contains(item.id) ? "checkmark.circle.fill" : "circle")
+                                .foregroundStyle(selectedItemIDs.contains(item.id) ? .green : .secondary)
+                            VStack(alignment: .leading) {
+                                Text(item.name)
+                                Text("\(item.category.title) · expires \(item.expDate, format: .dateTime.month().day())")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if importedItemIDs.contains(item.id) {
+                                Image(systemName: "tray.and.arrow.down.fill").foregroundStyle(.blue)
+                            }
                         }
                     }
+                    .buttonStyle(.plain)
+                    .disabled(importedItemIDs.contains(item.id))
+                    .accessibilityIdentifier("DetectedReceiptItem-\(item.canonicalName)")
                 }
                 if !result.ignoredLines.isEmpty {
                     Text("Ignored \(result.ignoredLines.count) receipt/admin line\(result.ignoredLines.count == 1 ? "" : "s").")
@@ -282,5 +348,13 @@ struct ParsedReceiptPanel: View {
             }
         }
         .accessibilityIdentifier("ParsedReceiptPanel")
+    }
+
+    private func toggleSelection(for item: FoodItem) {
+        if selectedItemIDs.contains(item.id) {
+            selectedItemIDs.remove(item.id)
+        } else {
+            selectedItemIDs.insert(item.id)
+        }
     }
 }

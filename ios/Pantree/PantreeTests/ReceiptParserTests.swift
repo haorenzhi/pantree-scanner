@@ -167,6 +167,17 @@ final class ReceiptParserTests: XCTestCase {
         XCTAssertEqual(result.items[0].buyDate, fallback)
     }
 
+    func testStandaloneWholeDoesNotBecomeSeparateMilkItem() {
+        let result = ReceiptParser().parse("""
+        WHOLE
+        WHOLE MILK $3.99
+        TOTAL 3.99
+        """)
+
+        XCTAssertEqual(result.items.map(\.name), ["Whole Milk"])
+        XCTAssertEqual(result.items.map(\.canonicalName), ["milk"])
+    }
+
     func testReceiptPhotoOCRTextNormalization() {
         let text = ReceiptImageTextRecognizer.normalizedOCRText("""
 

@@ -61,13 +61,19 @@ enum LocalFoodKnowledge {
             return exact
         }
 
+        let reverseAliasStopWords: Set<String> = [
+            "whole", "organic", "large", "small", "medium", "fresh", "regular", "bag", "package", "pack"
+        ]
+
         for (key, profile) in profiles {
             if normalized.contains(key) || key.contains(normalized) {
                 return profile
             }
             if profile.aliases.contains(where: { alias in
                 let normalizedAlias = normalize(alias)
-                return normalized.contains(normalizedAlias) || normalizedAlias.contains(normalized)
+                return normalized == normalizedAlias
+                    || normalized.contains(normalizedAlias)
+                    || (!reverseAliasStopWords.contains(normalized) && normalizedAlias.contains(normalized))
             }) {
                 return profile
             }
