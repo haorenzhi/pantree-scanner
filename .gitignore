@@ -77,3 +77,8 @@ bridge-server/local-cache/
 
 # Production build output
 build/
+
+# Xcode user-local state
+*.xcuserstate
+*.xcworkspace/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
