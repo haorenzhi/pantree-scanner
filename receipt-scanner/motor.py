@@ -1,26 +1,33 @@
 """
-Stepper motor control for receipt feeder.
+Motor control for receipt feeder.
 
-Controls a NEMA 17 stepper motor via Easy Driver (A3967) board
-using STEP/DIR pulse interface to scroll a receipt past the camera.
+Supported modes:
+    1. STEP/DIR stepper driver (A3967/Easy Driver, STSPIN220, etc.)
+    2. DRV8833 H-bridge with a 2-wire DC right-angle gear motor
 
-Easy Driver wiring (BCM pins):
-  STEP   -> GPIO 17   (pulse rising-edge = one microstep)
-  DIR    -> GPIO 27   (HIGH = forward, LOW = reverse)
-  ENABLE -> GPIO 22   (active-LOW: LOW = enabled, HIGH = disabled/sleep)
+Default mode is STEP/DIR. Select DRV8833 with:
+    python main.py --motor-driver drv8833
 
-Easy Driver defaults to 1/8 microstepping (MS1=HIGH, MS2=HIGH).
-  NEMA 17 = 200 full steps/rev  ->  1600 microsteps/rev at 1/8.
+DRV8833 wiring for one motor on channel A:
+    AIN1 / IN1 / A1  -> GPIO 17   (physical pin 11)
+    AIN2 / IN2 / A2  -> GPIO 27   (physical pin 13)
+    nSLEEP / SLP     -> GPIO 22   (physical pin 15), optional but recommended
+    GND              -> Pi GND + external motor supply GND
+    VM / VIN         -> external motor supply + (match motor voltage)
+    AOUT1/AO1/OUT1   -> motor wire 1
+    AOUT2/AO2/OUT2   -> motor wire 2
 
-Power: 12V supply to Easy Driver M+ / GND. Pi 5V NOT connected to driver.
+Never power the motor from a Pi GPIO pin. Pi GPIO logic is 3.3V only.
 """
 
+import os
 import time
 
 try:
-    from gpiozero import OutputDevice
+    from gpiozero import OutputDevice, PWMOutputDevice
 except ImportError:
     OutputDevice = None
+    PWMOutputDevice = None
 
 try:
     import RPi.GPIO as GPIO
@@ -35,9 +42,13 @@ ENABLE_PIN = 22
 ALL_MOTOR_PINS = [STEP_PIN, DIR_PIN, ENABLE_PIN]
 
 _backend = None
+_motor_driver = None
 _step_device = None
 _dir_device = None
 _enable_device = None
+_dc_in1_device = None
+_dc_in2_device = None
+_dc_sleep_device = None
 
 # --- Motor / mechanical constants ---
 FULL_STEPS_PER_REV = 200          # NEMA 17 standard
@@ -57,10 +68,27 @@ DEFAULT_STEP_DELAY = 0.002  # seconds per microstep (~5 mm/s)
 # Easy Driver minimum pulse width is ~1μs; we use 50μs for safety.
 PULSE_WIDTH = 0.00005  # 50 μs HIGH pulse
 
+# Timed feed calibration for a 2-wire DC gear motor on DRV8833.
+# Increase/decrease after measuring how far your roller moves in 1 second.
+DC_FEED_MM_PER_SECOND = float(os.getenv("PANTREE_DC_FEED_MM_PER_SECOND", "20"))
+DC_DEFAULT_SPEED = float(os.getenv("PANTREE_DC_SPEED", "0.55"))
 
-def init_motor():
-    """Initialize GPIO pins for Easy Driver motor control."""
-    global _backend, _step_device, _dir_device, _enable_device
+
+def _normalized_driver_name(driver=None):
+    return (driver or os.getenv("PANTREE_MOTOR_DRIVER", "stepper")).strip().lower()
+
+
+def init_motor(driver=None):
+    """Initialize GPIO pins for the selected motor driver."""
+    driver = _normalized_driver_name(driver)
+    if driver in ("drv8833", "dc", "gear", "gear-motor", "right-angle"):
+        return _init_drv8833()
+    return _init_step_dir()
+
+
+def _init_step_dir():
+    """Initialize GPIO pins for STEP/DIR motor control."""
+    global _backend, _motor_driver, _step_device, _dir_device, _enable_device
 
     if OutputDevice is not None:
         try:
@@ -69,6 +97,7 @@ def init_motor():
             # ENABLE is active-LOW: active_high=False means .on() drives LOW.
             _enable_device = OutputDevice(ENABLE_PIN, active_high=False, initial_value=True)
             _backend = "gpiozero"
+            _motor_driver = "stepper"
             print("[motor] Easy Driver initialized via gpiozero/lgpio (STEP=17, DIR=27, EN=22)")
             return True
         except Exception as e:
@@ -87,6 +116,7 @@ def init_motor():
             # ENABLE active-LOW: set LOW to enable the driver
             GPIO.setup(ENABLE_PIN, GPIO.OUT, initial=GPIO.LOW)
             _backend = "rpi_gpio"
+            _motor_driver = "stepper"
             print("[motor] Easy Driver initialized via RPi.GPIO (STEP=17, DIR=27, EN=22)")
             return True
         except Exception as e:
@@ -96,17 +126,65 @@ def init_motor():
     return False
 
 
+def _init_drv8833():
+    """Initialize GPIO pins for DRV8833 + 2-wire DC gear motor control."""
+    global _backend, _motor_driver, _dc_in1_device, _dc_in2_device, _dc_sleep_device
+
+    if OutputDevice is not None:
+        try:
+            output_class = PWMOutputDevice or OutputDevice
+            _dc_in1_device = output_class(STEP_PIN, active_high=True, initial_value=False)
+            _dc_in2_device = output_class(DIR_PIN, active_high=True, initial_value=False)
+            _dc_sleep_device = OutputDevice(ENABLE_PIN, active_high=True, initial_value=True)
+            _backend = "gpiozero"
+            _motor_driver = "drv8833"
+            print("[motor] DRV8833 initialized via gpiozero/lgpio (AIN1=17, AIN2=27, SLP=22)")
+            return True
+        except Exception as e:
+            print(f"[motor] DRV8833 gpiozero init failed: {e}")
+            _dc_in1_device = None
+            _dc_in2_device = None
+            _dc_sleep_device = None
+
+    if GPIO is not None:
+        try:
+            GPIO.setmode(GPIO.BCM)
+            GPIO.setwarnings(False)
+            GPIO.setup(STEP_PIN, GPIO.OUT, initial=GPIO.LOW)
+            GPIO.setup(DIR_PIN, GPIO.OUT, initial=GPIO.LOW)
+            GPIO.setup(ENABLE_PIN, GPIO.OUT, initial=GPIO.HIGH)
+            _backend = "rpi_gpio"
+            _motor_driver = "drv8833"
+            print("[motor] DRV8833 initialized via RPi.GPIO (AIN1=17, AIN2=27, SLP=22)")
+            return True
+        except Exception as e:
+            print(f"[motor] DRV8833 RPi.GPIO init failed: {e}")
+
+    print("[motor] No GPIO backend available (install python3-gpiozero python3-lgpio)")
+    return False
+
+
 def enable_motor():
-    """Enable the Easy Driver (active-LOW)."""
-    if _backend == "gpiozero" and _enable_device is not None:
+    """Enable the motor driver."""
+    if _motor_driver == "drv8833" and _backend == "gpiozero" and _dc_sleep_device is not None:
+        _dc_sleep_device.on()
+    elif _motor_driver == "drv8833" and _backend == "rpi_gpio" and GPIO is not None:
+        GPIO.output(ENABLE_PIN, GPIO.HIGH)
+    elif _backend == "gpiozero" and _enable_device is not None:
         _enable_device.on()
     elif _backend == "rpi_gpio" and GPIO is not None:
         GPIO.output(ENABLE_PIN, GPIO.LOW)
 
 
 def disable_motor():
-    """Disable the Easy Driver to save power and reduce heat."""
-    if _backend == "gpiozero" and _enable_device is not None:
+    """Disable the motor driver to save power and reduce heat."""
+    if _motor_driver == "drv8833":
+        _stop_dc_motor()
+        if _backend == "gpiozero" and _dc_sleep_device is not None:
+            _dc_sleep_device.off()
+        elif _backend == "rpi_gpio" and GPIO is not None:
+            GPIO.output(ENABLE_PIN, GPIO.LOW)
+    elif _backend == "gpiozero" and _enable_device is not None:
         _enable_device.off()
     elif _backend == "rpi_gpio" and GPIO is not None:
         GPIO.output(ENABLE_PIN, GPIO.HIGH)
@@ -114,11 +192,12 @@ def disable_motor():
 
 def cleanup_motor():
     """Disable driver and release GPIO pins."""
-    global _backend, _step_device, _dir_device, _enable_device
+    global _backend, _motor_driver, _step_device, _dir_device, _enable_device
+    global _dc_in1_device, _dc_in2_device, _dc_sleep_device
     try:
         disable_motor()
         if _backend == "gpiozero":
-            for device in (_step_device, _dir_device, _enable_device):
+            for device in (_step_device, _dir_device, _enable_device, _dc_in1_device, _dc_in2_device, _dc_sleep_device):
                 if device is not None:
                     device.close()
         elif _backend == "rpi_gpio" and GPIO is not None:
@@ -130,9 +209,57 @@ def cleanup_motor():
         pass
     finally:
         _backend = None
+        _motor_driver = None
         _step_device = None
         _dir_device = None
         _enable_device = None
+        _dc_in1_device = None
+        _dc_in2_device = None
+        _dc_sleep_device = None
+
+
+def _set_device_value(device, value):
+    """Set OutputDevice/PWMOutputDevice value safely."""
+    if device is None:
+        return
+    if hasattr(device, "value"):
+        device.value = max(0, min(1, value))
+    elif value > 0:
+        device.on()
+    else:
+        device.off()
+
+
+def _stop_dc_motor():
+    """Coast/stop the DRV8833 channel."""
+    if _backend == "gpiozero":
+        _set_device_value(_dc_in1_device, 0)
+        _set_device_value(_dc_in2_device, 0)
+    elif _backend == "rpi_gpio" and GPIO is not None:
+        GPIO.output(STEP_PIN, GPIO.LOW)
+        GPIO.output(DIR_PIN, GPIO.LOW)
+
+
+def _run_dc_motor(seconds, forward=True, speed=DC_DEFAULT_SPEED):
+    """Run the DRV8833 motor channel for a timed feed."""
+    if _backend is None:
+        print(f"[motor] Simulating DC motor for {seconds:.2f}s")
+        return
+
+    enable_motor()
+    speed = max(0.15, min(1.0, speed))
+    if _backend == "gpiozero":
+        if forward:
+            _set_device_value(_dc_in1_device, speed)
+            _set_device_value(_dc_in2_device, 0)
+        else:
+            _set_device_value(_dc_in1_device, 0)
+            _set_device_value(_dc_in2_device, speed)
+    elif _backend == "rpi_gpio" and GPIO is not None:
+        GPIO.output(STEP_PIN, GPIO.HIGH if forward else GPIO.LOW)
+        GPIO.output(DIR_PIN, GPIO.LOW if forward else GPIO.HIGH)
+    time.sleep(max(0, seconds))
+    _stop_dc_motor()
 
 
 def feed_steps(steps, delay=DEFAULT_STEP_DELAY):
@@ -140,6 +267,12 @@ def feed_steps(steps, delay=DEFAULT_STEP_DELAY):
     Advance the receipt by a given number of microsteps.
     Positive = feed forward, negative = reverse.
     """
+    if _motor_driver == "drv8833":
+        # Compatibility shim: approximate step-style requests as timed DC movement.
+        mm = steps / STEPS_PER_MM
+        feed_mm(mm)
+        return
+
     if _backend is None:
         print(f"[motor] Simulating {steps} microsteps")
         return
@@ -167,6 +300,12 @@ def feed_steps(steps, delay=DEFAULT_STEP_DELAY):
 
 def feed_mm(mm, delay=DEFAULT_STEP_DELAY):
     """Advance the receipt by a given distance in millimeters."""
+    if _motor_driver == "drv8833":
+        seconds = abs(mm) / max(1, DC_FEED_MM_PER_SECOND)
+        print(f"[motor] DRV8833 timed feed: {mm:.1f} mm ≈ {seconds:.2f}s at speed {DC_DEFAULT_SPEED:.2f}")
+        _run_dc_motor(seconds, forward=mm >= 0)
+        return
+
     steps = int(mm * STEPS_PER_MM)
     feed_steps(steps, delay)
 

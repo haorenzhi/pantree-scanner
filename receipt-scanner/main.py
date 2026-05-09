@@ -18,6 +18,7 @@ Usage:
 """
 
 import argparse
+import os
 import sys
 
 from motor import init_motor, cleanup_motor, feed_mm
@@ -88,16 +89,17 @@ def display_items(items):
         )
 
 
-def scan_receipt_hardware(use_motor=True):
+def scan_receipt_hardware(use_motor=True, motor_driver="stepper"):
     """Full hardware scan pipeline using Pi Camera and stepper motor.
     
     Args:
         use_motor: If False, skip motor and take a single snapshot instead.
+        motor_driver: "stepper" for STEP/DIR drivers, "drv8833" for DC gear motor.
     """
     # Initialize hardware
     motor_ok = False
     if use_motor:
-        motor_ok = init_motor()
+        motor_ok = init_motor(motor_driver)
     camera = ReceiptCamera()
     camera_ok = camera.init_camera()
     led_ok = init_leds()
@@ -234,6 +236,11 @@ def main():
         help="Snapshot mode: take a single photo per button press (no stepper motor)"
     )
     parser.add_argument(
+        "--motor-driver", choices=("stepper", "drv8833"),
+        default=os.getenv("PANTREE_MOTOR_DRIVER", "stepper"),
+        help="Motor driver type: stepper for STEP/DIR drivers or drv8833 for a 2-wire DC gear motor"
+    )
+    parser.add_argument(
         "--bridge-url", default="http://localhost:4000/api/foods",
         help="Bridge server URL (default: http://localhost:4000/api/foods)"
     )
@@ -280,7 +287,7 @@ def main():
                     if not wait_for_keyboard():
                         break
 
-                scan_receipt_hardware(use_motor=not args.no_motor)
+                scan_receipt_hardware(use_motor=not args.no_motor, motor_driver=args.motor_driver)
                 # Return to idle indicator between scans
                 leds_idle()
 
