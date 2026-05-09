@@ -6,7 +6,7 @@ Native SwiftUI proof-of-concept for Pantree food intelligence. The app is design
 
 - Inventory dashboard with health balance, expiration risk, shopping suggestions, meal ideas, and ML-readiness notes.
 - Local receipt import from pasted/sample OCR text.
-- VisionKit camera receipt scanner entry point on supported iPhones.
+- Camera-style receipt capture with a bottom-center shutter, bottom-left photo library picker, and local Vision OCR.
 - Food photo prediction UI with a local predictor abstraction and camera picker.
 - Local JSON persistence in the app sandbox.
 - Unit, integration, and UI tests.

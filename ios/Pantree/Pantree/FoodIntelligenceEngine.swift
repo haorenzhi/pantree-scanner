@@ -37,7 +37,7 @@ struct FoodIntelligenceEngine: Sendable {
             shoppingSuggestions: buildShoppingSuggestions(items: activeItems, events: events, on: date),
             mealIdeas: buildMealIdeas(items: activeItems, risks: expiryRisks),
             mlReadiness: [
-                "On-device receipt text extraction can use VisionKit without uploading images.",
+                "On-device receipt text extraction can run Vision OCR on captured images without uploading photos.",
                 "Food photo recognition can use a small Core ML classifier with local confirmation.",
                 "Quantity estimation should combine repeated camera views, inventory state, and user corrections.",
                 "Restock timing can be learned from local event history only."

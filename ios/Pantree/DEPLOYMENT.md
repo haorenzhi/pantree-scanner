@@ -67,9 +67,9 @@ On the device, verify:
 
 1. Dashboard shows local inventory and privacy banner.
 2. Inventory tab shows sample foods.
-3. Receipt tab → **Use Sample Receipt** → **Import Receipt**.
-4. Receipt tab → **Scan With Camera** if VisionKit is available.
-5. Photo tab → **Take Photo** and **Use Sample Meal Photo**.
+3. Receipt tab → **Use Sample Receipt** → **Add Selected Items to Inventory**.
+4. Receipt tab → **Capture Receipt**; use the bottom-center shutter for a new photo or the bottom-left library button for an existing receipt image.
+5. Diet tab → **Take Photo** and **Use Sample Meal Photo**.
 6. Use **Ate** or **Discard** and confirm the dashboard updates.
 
 ## VS Code task summary

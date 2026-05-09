@@ -23,7 +23,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Pantree uses the camera to scan receipts and run on-device food photo prediction. Images stay on this iPhone.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Pantree can use selected food photos for on-device prediction. Photos are not uploaded.</string>
+	<string>Pantree can use selected receipt and food photos for on-device OCR and prediction. Photos are not uploaded.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>

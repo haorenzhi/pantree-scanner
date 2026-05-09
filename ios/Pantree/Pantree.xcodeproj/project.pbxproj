@@ -18,7 +18,6 @@
 		A00100000000000000000009 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00200000000000000000009 /* ContentView.swift */; };
 		A0010000000000000000000A /* InventoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0020000000000000000000A /* InventoryView.swift */; };
 		A0010000000000000000000B /* ReceiptScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0020000000000000000000B /* ReceiptScannerView.swift */; };
-		A0010000000000000000000C /* ReceiptDataScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0020000000000000000000C /* ReceiptDataScannerView.swift */; };
 		A0010000000000000000000D /* CameraImagePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0020000000000000000000D /* CameraImagePicker.swift */; };
 		A0010000000000000000000E /* FoodPhotoPredictionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0020000000000000000000E /* FoodPhotoPredictionView.swift */; };
 		A00100000000000000000021 /* FoodKnowledgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00200000000000000000021 /* FoodKnowledgeTests.swift */; };
@@ -59,7 +58,6 @@
 		A00200000000000000000009 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		A0020000000000000000000A /* InventoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InventoryView.swift; sourceTree = "<group>"; };
 		A0020000000000000000000B /* ReceiptScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiptScannerView.swift; sourceTree = "<group>"; };
-		A0020000000000000000000C /* ReceiptDataScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiptDataScannerView.swift; sourceTree = "<group>"; };
 		A0020000000000000000000D /* CameraImagePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraImagePicker.swift; sourceTree = "<group>"; };
 		A0020000000000000000000E /* FoodPhotoPredictionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoodPhotoPredictionView.swift; sourceTree = "<group>"; };
 		A0020000000000000000000F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -117,7 +115,6 @@
 				A00200000000000000000009 /* ContentView.swift */,
 				A0020000000000000000000A /* InventoryView.swift */,
 				A0020000000000000000000B /* ReceiptScannerView.swift */,
-				A0020000000000000000000C /* ReceiptDataScannerView.swift */,
 				A0020000000000000000000D /* CameraImagePicker.swift */,
 				A0020000000000000000000E /* FoodPhotoPredictionView.swift */,
 				A00200000000000000000001 /* Models.swift */,
@@ -302,7 +299,6 @@
 				A00100000000000000000009 /* ContentView.swift in Sources */,
 				A0010000000000000000000A /* InventoryView.swift in Sources */,
 				A0010000000000000000000B /* ReceiptScannerView.swift in Sources */,
-				A0010000000000000000000C /* ReceiptDataScannerView.swift in Sources */,
 				A0010000000000000000000D /* CameraImagePicker.swift in Sources */,
 				A0010000000000000000000E /* FoodPhotoPredictionView.swift in Sources */,
 			);

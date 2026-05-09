@@ -1,10 +1,9 @@
-import PhotosUI
 import SwiftUI
-#if canImport(Vision)
-import Vision
+#if canImport(UIKit)
+import UIKit
 #endif
-#if canImport(VisionKit)
-import VisionKit
+#if canImport(Vision)
+@preconcurrency import Vision
 #endif
 
 struct ReceiptScannerView: View {
@@ -15,9 +14,8 @@ struct ReceiptScannerView: View {
     @State private var importedItemIDs: Set<UUID> = []
     @State private var errorMessage: String?
     @State private var photoImportMessage: String?
-    @State private var showingCameraScanner = false
-    @State private var selectedReceiptPhoto: PhotosPickerItem?
-    @State private var isRecognizingReceiptPhoto = false
+    @State private var showingReceiptCapture = false
+    @State private var isRecognizingReceiptImage = false
     @FocusState private var isReceiptTextFocused: Bool
 
     private let parser = ReceiptParser()
@@ -26,7 +24,7 @@ struct ReceiptScannerView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    Text("Scan a receipt with the camera on iPhone, or paste OCR text. The POC parses text locally and predicts storage/expiration without external APIs.")
+                    Text("Capture a receipt with the camera, choose an existing photo from the same capture screen, or paste OCR text. Pantree parses text locally and predicts storage/expiration without external APIs.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
 
@@ -41,25 +39,6 @@ struct ReceiptScannerView: View {
 
                         cameraButton
                     }
-
-                    PhotosPicker(
-                        selection: Binding(
-                            get: { selectedReceiptPhoto },
-                            set: { newItem in
-                                selectedReceiptPhoto = newItem
-                                if let newItem {
-                                    recognizeReceiptPhoto(newItem)
-                                }
-                            }
-                        ),
-                        matching: .images,
-                        photoLibrary: .shared()
-                    ) {
-                        Label(isRecognizingReceiptPhoto ? "Reading Receipt Photo..." : "Choose Receipt Photo", systemImage: "photo.on.rectangle")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(isRecognizingReceiptPhoto)
-                    .accessibilityIdentifier("ChooseReceiptPhotoButton")
 
                     TextEditor(text: $receiptText)
                         .focused($isReceiptTextFocused)
@@ -113,7 +92,7 @@ struct ReceiptScannerView: View {
                     .accessibilityIdentifier("DismissReceiptKeyboardButton")
                 }
             }
-            .sheet(isPresented: $showingCameraScanner) {
+            .fullScreenCover(isPresented: $showingReceiptCapture) {
                 cameraScannerSheet
             }
             .onChange(of: receiptText) { _, newText in
@@ -124,18 +103,16 @@ struct ReceiptScannerView: View {
 
     @ViewBuilder
     private var cameraButton: some View {
-        #if canImport(VisionKit)
-        if #available(iOS 16.0, *), DataScannerViewController.isSupported {
-            Button("Scan With Camera") {
-                isReceiptTextFocused = false
-                showingCameraScanner = true
-            }
-            .buttonStyle(.borderedProminent)
-        } else {
-            Button("Camera OCR unavailable") {}
-                .buttonStyle(.bordered)
-                .disabled(true)
+        #if canImport(UIKit)
+        Button {
+            isReceiptTextFocused = false
+            showingReceiptCapture = true
+        } label: {
+            Label(isRecognizingReceiptImage ? "Reading Receipt..." : "Capture Receipt", systemImage: "camera.viewfinder")
         }
+        .buttonStyle(.borderedProminent)
+        .disabled(isRecognizingReceiptImage)
+        .accessibilityIdentifier("CaptureReceiptButton")
         #else
         Button("Camera OCR unavailable") {}
             .buttonStyle(.bordered)
@@ -145,14 +122,15 @@ struct ReceiptScannerView: View {
 
     @ViewBuilder
     private var cameraScannerSheet: some View {
-        #if canImport(VisionKit)
-        if #available(iOS 16.0, *) {
-            ReceiptDataScannerView(recognizedText: $receiptText)
-        } else {
-            Text("Camera OCR requires iOS 16 or later.").padding()
+        #if canImport(UIKit)
+        ReceiptCameraCaptureView { capturedImage in
+            recognizeReceiptImage(capturedImage)
+        } onError: { message in
+            errorMessage = message
         }
+        .ignoresSafeArea()
         #else
-        Text("VisionKit is unavailable on this platform.").padding()
+        Text("Camera capture is unavailable on this platform.").padding()
         #endif
     }
 
@@ -211,40 +189,37 @@ struct ReceiptScannerView: View {
         return "Add \(count) Selected Item\(count == 1 ? "" : "s") to Inventory"
     }
 
-    private func recognizeReceiptPhoto(_ item: PhotosPickerItem) {
+    #if canImport(UIKit)
+    private func recognizeReceiptImage(_ capturedImage: ReceiptCapturedImage) {
         isReceiptTextFocused = false
         Task {
             await MainActor.run {
-                isRecognizingReceiptPhoto = true
+                isRecognizingReceiptImage = true
                 errorMessage = nil
                 photoImportMessage = nil
             }
 
             do {
-                guard let imageData = try await item.loadTransferable(type: Data.self) else {
-                    throw ReceiptImageTextRecognizerError.missingImageData
-                }
-                let recognizedText = try await ReceiptImageTextRecognizer().recognizeText(from: imageData)
+                let recognizedText = try await ReceiptImageTextRecognizer().recognizeText(from: capturedImage.imageData)
                 await MainActor.run {
-                    selectedReceiptPhoto = nil
-                    isRecognizingReceiptPhoto = false
+                    isRecognizingReceiptImage = false
                     guard !recognizedText.isEmpty else {
-                        errorMessage = "No readable receipt text was found in that photo."
+                        errorMessage = "No readable receipt text was found in that \(capturedImage.source.shortLabel)."
                         return
                     }
                     receiptText = recognizedText
                     detectReceiptItems(from: recognizedText)
-                    photoImportMessage = "Loaded receipt text from photo locally. Review detected items before adding."
+                    photoImportMessage = "Loaded receipt text from \(capturedImage.source.shortLabel) locally. Review detected items before adding."
                 }
             } catch {
                 await MainActor.run {
-                    selectedReceiptPhoto = nil
-                    isRecognizingReceiptPhoto = false
-                    errorMessage = "Could not read receipt photo: \(error.localizedDescription)"
+                    isRecognizingReceiptImage = false
+                    errorMessage = "Could not read receipt image: \(error.localizedDescription)"
                 }
             }
         }
     }
+    #endif
 }
 
 enum ReceiptImageTextRecognizerError: LocalizedError, Equatable {
