@@ -9,9 +9,9 @@ Default mode is STEP/DIR. Select DRV8833 with:
     python main.py --motor-driver drv8833
 
 DRV8833 wiring for one motor on channel A:
-    AIN1 / IN1 / A1  -> GPIO 17   (physical pin 11)
+    AIN1 / IN1 / A1  -> GPIO 22   (physical pin 15)
     AIN2 / IN2 / A2  -> GPIO 27   (physical pin 13)
-    nSLEEP / SLP     -> GPIO 22   (physical pin 15), optional but recommended
+    SLEEP / nSLEEP   -> not used by default; tie to 3.3V only if your board exposes it
     GND              -> Pi GND + external motor supply GND
     VM / VIN         -> external motor supply + (match motor voltage)
     AOUT1/AO1/OUT1   -> motor wire 1
@@ -49,6 +49,7 @@ _enable_device = None
 _dc_in1_device = None
 _dc_in2_device = None
 _dc_sleep_device = None
+_active_motor_pins = []
 
 # --- Motor / mechanical constants ---
 FULL_STEPS_PER_REV = 200          # NEMA 17 standard
@@ -72,6 +73,10 @@ PULSE_WIDTH = 0.00005  # 50 μs HIGH pulse
 # Increase/decrease after measuring how far your roller moves in 1 second.
 DC_FEED_MM_PER_SECOND = float(os.getenv("PANTREE_DC_FEED_MM_PER_SECOND", "20"))
 DC_DEFAULT_SPEED = float(os.getenv("PANTREE_DC_SPEED", "0.55"))
+DC_IN1_PIN = int(os.getenv("PANTREE_DRV8833_IN1_PIN", "22"))
+DC_IN2_PIN = int(os.getenv("PANTREE_DRV8833_IN2_PIN", "27"))
+_dc_sleep_pin_text = os.getenv("PANTREE_DRV8833_SLEEP_PIN", "").strip()
+DC_SLEEP_PIN = int(_dc_sleep_pin_text) if _dc_sleep_pin_text else None
 
 
 def _normalized_driver_name(driver=None):
@@ -88,7 +93,7 @@ def init_motor(driver=None):
 
 def _init_step_dir():
     """Initialize GPIO pins for STEP/DIR motor control."""
-    global _backend, _motor_driver, _step_device, _dir_device, _enable_device
+    global _backend, _motor_driver, _step_device, _dir_device, _enable_device, _active_motor_pins
 
     if OutputDevice is not None:
         try:
@@ -98,6 +103,7 @@ def _init_step_dir():
             _enable_device = OutputDevice(ENABLE_PIN, active_high=False, initial_value=True)
             _backend = "gpiozero"
             _motor_driver = "stepper"
+            _active_motor_pins = ALL_MOTOR_PINS
             print("[motor] Easy Driver initialized via gpiozero/lgpio (STEP=17, DIR=27, EN=22)")
             return True
         except Exception as e:
@@ -117,6 +123,7 @@ def _init_step_dir():
             GPIO.setup(ENABLE_PIN, GPIO.OUT, initial=GPIO.LOW)
             _backend = "rpi_gpio"
             _motor_driver = "stepper"
+            _active_motor_pins = ALL_MOTOR_PINS
             print("[motor] Easy Driver initialized via RPi.GPIO (STEP=17, DIR=27, EN=22)")
             return True
         except Exception as e:
@@ -128,17 +135,26 @@ def _init_step_dir():
 
 def _init_drv8833():
     """Initialize GPIO pins for DRV8833 + 2-wire DC gear motor control."""
-    global _backend, _motor_driver, _dc_in1_device, _dc_in2_device, _dc_sleep_device
+    global _backend, _motor_driver, _dc_in1_device, _dc_in2_device, _dc_sleep_device, _active_motor_pins
+
+    active_pins = [DC_IN1_PIN, DC_IN2_PIN]
+    if DC_SLEEP_PIN is not None:
+        active_pins.append(DC_SLEEP_PIN)
 
     if OutputDevice is not None:
         try:
             output_class = PWMOutputDevice or OutputDevice
-            _dc_in1_device = output_class(STEP_PIN, active_high=True, initial_value=False)
-            _dc_in2_device = output_class(DIR_PIN, active_high=True, initial_value=False)
-            _dc_sleep_device = OutputDevice(ENABLE_PIN, active_high=True, initial_value=True)
+            _dc_in1_device = output_class(DC_IN1_PIN, active_high=True, initial_value=False)
+            _dc_in2_device = output_class(DC_IN2_PIN, active_high=True, initial_value=False)
+            _dc_sleep_device = (
+                OutputDevice(DC_SLEEP_PIN, active_high=True, initial_value=True)
+                if DC_SLEEP_PIN is not None else None
+            )
             _backend = "gpiozero"
             _motor_driver = "drv8833"
-            print("[motor] DRV8833 initialized via gpiozero/lgpio (AIN1=17, AIN2=27, SLP=22)")
+            _active_motor_pins = active_pins
+            sleep_text = DC_SLEEP_PIN if DC_SLEEP_PIN is not None else "disabled"
+            print(f"[motor] DRV8833 initialized via gpiozero/lgpio (AIN1={DC_IN1_PIN}, AIN2={DC_IN2_PIN}, SLP={sleep_text})")
             return True
         except Exception as e:
             print(f"[motor] DRV8833 gpiozero init failed: {e}")
@@ -150,12 +166,15 @@ def _init_drv8833():
         try:
             GPIO.setmode(GPIO.BCM)
             GPIO.setwarnings(False)
-            GPIO.setup(STEP_PIN, GPIO.OUT, initial=GPIO.LOW)
-            GPIO.setup(DIR_PIN, GPIO.OUT, initial=GPIO.LOW)
-            GPIO.setup(ENABLE_PIN, GPIO.OUT, initial=GPIO.HIGH)
+            GPIO.setup(DC_IN1_PIN, GPIO.OUT, initial=GPIO.LOW)
+            GPIO.setup(DC_IN2_PIN, GPIO.OUT, initial=GPIO.LOW)
+            if DC_SLEEP_PIN is not None:
+                GPIO.setup(DC_SLEEP_PIN, GPIO.OUT, initial=GPIO.HIGH)
             _backend = "rpi_gpio"
             _motor_driver = "drv8833"
-            print("[motor] DRV8833 initialized via RPi.GPIO (AIN1=17, AIN2=27, SLP=22)")
+            _active_motor_pins = active_pins
+            sleep_text = DC_SLEEP_PIN if DC_SLEEP_PIN is not None else "disabled"
+            print(f"[motor] DRV8833 initialized via RPi.GPIO (AIN1={DC_IN1_PIN}, AIN2={DC_IN2_PIN}, SLP={sleep_text})")
             return True
         except Exception as e:
             print(f"[motor] DRV8833 RPi.GPIO init failed: {e}")
@@ -168,8 +187,8 @@ def enable_motor():
     """Enable the motor driver."""
     if _motor_driver == "drv8833" and _backend == "gpiozero" and _dc_sleep_device is not None:
         _dc_sleep_device.on()
-    elif _motor_driver == "drv8833" and _backend == "rpi_gpio" and GPIO is not None:
-        GPIO.output(ENABLE_PIN, GPIO.HIGH)
+    elif _motor_driver == "drv8833" and _backend == "rpi_gpio" and GPIO is not None and DC_SLEEP_PIN is not None:
+        GPIO.output(DC_SLEEP_PIN, GPIO.HIGH)
     elif _backend == "gpiozero" and _enable_device is not None:
         _enable_device.on()
     elif _backend == "rpi_gpio" and GPIO is not None:
@@ -182,8 +201,8 @@ def disable_motor():
         _stop_dc_motor()
         if _backend == "gpiozero" and _dc_sleep_device is not None:
             _dc_sleep_device.off()
-        elif _backend == "rpi_gpio" and GPIO is not None:
-            GPIO.output(ENABLE_PIN, GPIO.LOW)
+        elif _backend == "rpi_gpio" and GPIO is not None and DC_SLEEP_PIN is not None:
+            GPIO.output(DC_SLEEP_PIN, GPIO.LOW)
     elif _backend == "gpiozero" and _enable_device is not None:
         _enable_device.off()
     elif _backend == "rpi_gpio" and GPIO is not None:
@@ -193,7 +212,7 @@ def disable_motor():
 def cleanup_motor():
     """Disable driver and release GPIO pins."""
     global _backend, _motor_driver, _step_device, _dir_device, _enable_device
-    global _dc_in1_device, _dc_in2_device, _dc_sleep_device
+    global _dc_in1_device, _dc_in2_device, _dc_sleep_device, _active_motor_pins
     try:
         disable_motor()
         if _backend == "gpiozero":
@@ -201,9 +220,9 @@ def cleanup_motor():
                 if device is not None:
                     device.close()
         elif _backend == "rpi_gpio" and GPIO is not None:
-            GPIO.output(STEP_PIN, GPIO.LOW)
-            GPIO.output(DIR_PIN, GPIO.LOW)
-            GPIO.cleanup(ALL_MOTOR_PINS)
+            for pin in _active_motor_pins:
+                GPIO.output(pin, GPIO.LOW)
+            GPIO.cleanup(_active_motor_pins)
     except RuntimeError:
         # Pins were never set up — nothing to clean
         pass
@@ -216,6 +235,7 @@ def cleanup_motor():
         _dc_in1_device = None
         _dc_in2_device = None
         _dc_sleep_device = None
+        _active_motor_pins = []
 
 
 def _set_device_value(device, value):
@@ -236,8 +256,8 @@ def _stop_dc_motor():
         _set_device_value(_dc_in1_device, 0)
         _set_device_value(_dc_in2_device, 0)
     elif _backend == "rpi_gpio" and GPIO is not None:
-        GPIO.output(STEP_PIN, GPIO.LOW)
-        GPIO.output(DIR_PIN, GPIO.LOW)
+        GPIO.output(DC_IN1_PIN, GPIO.LOW)
+        GPIO.output(DC_IN2_PIN, GPIO.LOW)
 
 
 def _run_dc_motor(seconds, forward=True, speed=DC_DEFAULT_SPEED):
@@ -256,8 +276,8 @@ def _run_dc_motor(seconds, forward=True, speed=DC_DEFAULT_SPEED):
             _set_device_value(_dc_in1_device, 0)
             _set_device_value(_dc_in2_device, speed)
     elif _backend == "rpi_gpio" and GPIO is not None:
-        GPIO.output(STEP_PIN, GPIO.HIGH if forward else GPIO.LOW)
-        GPIO.output(DIR_PIN, GPIO.LOW if forward else GPIO.HIGH)
+        GPIO.output(DC_IN1_PIN, GPIO.HIGH if forward else GPIO.LOW)
+        GPIO.output(DC_IN2_PIN, GPIO.LOW if forward else GPIO.HIGH)
     time.sleep(max(0, seconds))
     _stop_dc_motor()
 
