@@ -82,3 +82,7 @@ build/
 *.xcuserstate
 *.xcworkspace/xcuserdata/
 *.xcodeproj/project.xcworkspace/xcuserdata/
+
+# Python bytecode cache
+__pycache__/
+*.pyc
