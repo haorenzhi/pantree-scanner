@@ -32,8 +32,14 @@ ssh -t "$TARGET" "sudo apt update && sudo apt install -y \
   python3-numpy \
   python3-requests \
   tesseract-ocr \
-  nodejs \
-  npm"
+  curl \
+  ca-certificates"
+
+echo "[2b/5] Installing Node.js LTS from NodeSource (avoids apt npm/libssl conflict)..."
+ssh -t "$TARGET" "if ! command -v node >/dev/null 2>&1; then \
+    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && \
+    sudo apt install -y nodejs; \
+  else echo \"node \$(node --version) already installed\"; fi"
 
 echo "[3/5] Copying scanner, bridge server, and web build..."
 rsync -az --delete \

@@ -10,8 +10,15 @@ import pytesseract
 import numpy as np
 
 
-# Tesseract config: PSM 6 = assume uniform block of text
-TESSERACT_CONFIG = "--psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.$/@#%&*()-+ "
+# Tesseract config: PSM 4 = assume a single column of variable-size text
+# (better for receipts than PSM 6), LSTM engine only, and a tighter
+# whitelist that drops the noisy symbols that produce junk tokens.
+TESSERACT_CONFIG = (
+    "--oem 1 --psm 4 "
+    "-c preserve_interword_spaces=1 "
+    "-c tessedit_char_whitelist="
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.$/@ "
+)
 
 # Target DPI for OCR (Tesseract works best at 300 DPI)
 TARGET_DPI = 300

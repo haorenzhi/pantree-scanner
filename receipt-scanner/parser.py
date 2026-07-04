@@ -114,6 +114,10 @@ EXPIRY_DB = [
     {"name": "Cereal", "fridge": 365, "shelf": 365, "freezer": 730},
     {"name": "Coffee", "fridge": 14, "shelf": 14, "freezer": 730},
     {"name": "Chocolate Syrup", "fridge": 365, "shelf": 365, "freezer": 0},
+    {"name": "Coconut Water", "fridge": 7, "shelf": 365, "freezer": 0},
+    {"name": "Sweet Potato", "fridge": 14, "shelf": 21, "freezer": 365},
+    {"name": "Bell Pepper", "fridge": 5, "shelf": 0, "freezer": 365},
+    {"name": "Scallions", "fridge": 7, "shelf": 0, "freezer": 180},
 ]
 
 # Common receipt abbreviations -> expanded form
@@ -213,6 +217,46 @@ QTY_PREFIX_PATTERN = re.compile(r"^\s*\d+\s*[x@]\s*", re.IGNORECASE)
 # Pattern for weight-based items like "0.50 kg @  $4.99/kg"
 WEIGHT_PATTERN = re.compile(r"^\s*\d+\.?\d*\s*(kg|lb|g|oz)\b", re.IGNORECASE)
 
+# Vowels used for readability/gibberish heuristics
+_VOWELS = set("aeiouAEIOU")
+
+
+def _looks_like_gibberish(name):
+    """
+    Heuristic check: does this look like OCR noise rather than a real word?
+
+    Catches things like "Sssits", "Aeuee", "A Lt Nn Ae", "Njo731T3646".
+    """
+    if not name:
+        return True
+
+    letters = [c for c in name if c.isalpha()]
+    if len(letters) < 3:
+        return True
+
+    # Real words are roughly 20-80% vowels; outside that range is usually noise
+    vowel_ratio = sum(1 for c in letters if c in _VOWELS) / len(letters)
+    if vowel_ratio < 0.2 or vowel_ratio > 0.8:
+        return True
+
+    tokens = name.split()
+
+    # Too many tiny fragments (e.g. "A Lt Nn Ae")
+    tiny = sum(1 for t in tokens if len(t.strip(".,;:-")) <= 2)
+    if len(tokens) >= 3 and tiny >= len(tokens) / 2:
+        return True
+
+    # A token mixing letters and digits is almost always an ID/code/weight
+    for t in tokens:
+        if re.search(r"[A-Za-z]", t) and re.search(r"\d", t):
+            return True
+
+    # A long run of consonants suggests OCR noise (e.g. "Qtv", "Tmmf")
+    if re.search(r"[bcdfghjklmnpqrstvwxz]{5,}", name, re.IGNORECASE):
+        return True
+
+    return False
+
 
 def _is_non_food_line(line):
     """Check if a line matches any non-food pattern."""
@@ -233,6 +277,15 @@ def _normalize_name(raw_name):
 
     # Remove quantity prefixes
     name = QTY_PREFIX_PATTERN.sub("", name)
+
+    # Strip a glued organic prefix: "OGGINGER"/"0GGINGER" -> "GINGER",
+    # "OGWHITE" -> "WHITE". Whole Foods prints "OG" for organic and OCR
+    # often reads the leading "O" as "0".
+    name = re.sub(r"^[0Oo][Gg]\s*(?=[A-Za-z])", "", name)
+
+    # Remove trailing currency/price garbage the price extractor couldn't
+    # parse, e.g. "LEOONIGN $a.85F" -> "LEOONIGN".
+    name = re.sub(r"\s*\$\S*\s*$", "", name)
 
     # Remove trailing weight/unit suffixes like "85/151LB", "12PK"
     name = re.sub(r"\d+/\d+\s*(?:LB|OZ|KG|G)\b", "", name, flags=re.IGNORECASE)
@@ -301,12 +354,38 @@ def _levenshtein_distance(s1, s2):
     return prev_row[-1]
 
 
+def _min_substring_distance(needle, haystack):
+    """
+    Minimum edit distance between `needle` and ANY substring of `haystack`.
+
+    Lets us find a food name buried inside a concatenated/garbled OCR token,
+    e.g. find "carrots" inside "ogloisecarruts". Start positions are free
+    (first DP row is all zeros) so only the matched window is scored.
+    """
+    m, n = len(needle), len(haystack)
+    if m == 0:
+        return 0
+    if n == 0:
+        return m
+
+    prev = [0] * (n + 1)  # row 0: matching the empty prefix anywhere is free
+    for i in range(1, m + 1):
+        curr = [i] + [0] * n
+        for j in range(1, n + 1):
+            cost = 0 if needle[i - 1] == haystack[j - 1] else 1
+            curr[j] = min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost)
+        prev = curr
+
+    return min(prev)
+
+
 def _match_food(name):
     """
     Fuzzy-match a parsed item name against the expiry database.
 
     Returns:
-        (canonical_name, section, exp_days) or None if no match found
+        (canonical_name, section, exp_days, confidence) or None if no match.
+        confidence is one of "exact", "substring", "fuzzy".
     """
     name_lower = name.lower()
 
@@ -314,35 +393,72 @@ def _match_food(name):
     for entry in EXPIRY_DB:
         if entry["name"].lower() == name_lower:
             section, days = _best_section(entry)
-            return entry["name"], section, days
+            return entry["name"], section, days, "exact"
 
-    # 2. Substring match (food name appears within the parsed name)
+    # 2. Substring match (food name appears within the parsed name as a word)
     best_sub = None
     best_sub_len = 0
     for entry in EXPIRY_DB:
         entry_lower = entry["name"].lower()
-        if entry_lower in name_lower and len(entry_lower) > best_sub_len:
+        # Require a word-boundary match so "bass" doesn't hit "embassy"
+        if re.search(r"\b" + re.escape(entry_lower) + r"\b", name_lower) and len(entry_lower) > best_sub_len:
             best_sub = entry
             best_sub_len = len(entry_lower)
 
-    if best_sub and best_sub_len >= 3:
+    if best_sub and best_sub_len >= 4:
         section, days = _best_section(best_sub)
-        return best_sub["name"], section, days
+        return best_sub["name"], section, days, "substring"
 
     # 3. Levenshtein distance (fuzzy match)
     best_match = None
     best_dist = float("inf")
     for entry in EXPIRY_DB:
-        dist = _levenshtein_distance(name_lower, entry["name"].lower())
-        # Normalize by length — allow ~30% character difference
-        max_len = max(len(name_lower), len(entry["name"]))
-        if dist < best_dist and dist <= max_len * 0.3:
+        entry_lower = entry["name"].lower()
+        dist = _levenshtein_distance(name_lower, entry_lower)
+        # Short food names (<=5 chars) are matched strictly to avoid
+        # garbage like "Was" -> "Bass"; allow at most 1 edit there.
+        if len(entry_lower) <= 5:
+            tolerance = 1
+        else:
+            # Allow ~20% character difference for longer names
+            tolerance = max(1, int(len(entry_lower) * 0.2))
+        if dist < best_dist and dist <= tolerance:
             best_dist = dist
             best_match = entry
 
     if best_match:
         section, days = _best_section(best_match)
-        return best_match["name"], section, days
+        return best_match["name"], section, days, "fuzzy"
+
+    # 4. Fuzzy substring: find a food buried inside a garbled/concatenated
+    #    token, e.g. "carrots" inside "ogloisecarruts", "pepper" in "redbellfepper".
+    #    Only applied to longer food names (>=5 chars) to limit false positives.
+    #    Origin/colour adjectives are dropped first so "Chinese" can't be
+    #    mis-read as "Chives".
+    substring_stopwords = {
+        "chinese", "japanese", "korean", "mexican", "italian", "french",
+        "thai", "white", "green", "red", "black", "yellow", "brown",
+        "baby", "fresh", "organic", "whole", "large", "small", "jumbo",
+    }
+    tokens = [t for t in re.sub(r"[^a-z ]", " ", name_lower).split()
+              if t not in substring_stopwords]
+    name_squished = "".join(tokens)
+    best_sub_match = None
+    best_sub_score = float("inf")
+    for entry in EXPIRY_DB:
+        food = re.sub(r"[^a-z]", "", entry["name"].lower())
+        if len(food) < 5:
+            continue
+        dist = _min_substring_distance(food, name_squished)
+        # Allow ~20% of the food-name length to differ within the window
+        tolerance = max(1, int(len(food) * 0.2))
+        if dist <= tolerance and dist < best_sub_score:
+            best_sub_score = dist
+            best_sub_match = entry
+
+    if best_sub_match:
+        section, days = _best_section(best_sub_match)
+        return best_sub_match["name"], section, days, "fuzzy"
 
     return None
 
@@ -373,12 +489,15 @@ def _best_section(entry):
     return options[0]
 
 
-def parse_receipt(raw_text):
+def parse_receipt(raw_text, strict=True):
     """
     Parse raw OCR text from a receipt into structured food items.
 
     Args:
         raw_text: full receipt text (newline-separated lines)
+        strict: when True (default), only keep items that match a known food
+            in the expiry database and discard OCR noise. Set False to fall
+            back to keeping unmatched lines as generic fridge items.
 
     Returns:
         list of dicts: [{ "name": str, "price": float|None,
@@ -452,20 +571,31 @@ def parse_receipt(raw_text):
         if alpha_ratio < 0.5:
             continue
 
-        seen_names.add(name.lower())
-
         # Fuzzy match against expiry database
         match_result = _match_food(name)
+
         if match_result:
-            canonical_name, section, exp_days = match_result
+            canonical_name, section, exp_days, confidence = match_result
+            # A loose (fuzzy) match on gibberish text is almost always a false
+            # positive (e.g. "Was" -> "Bass"); require a high-confidence match.
+            if confidence == "fuzzy" and _looks_like_gibberish(name):
+                continue
+            seen_names.add(name.lower())
             items.append({
                 "name": canonical_name,
                 "price": price,
                 "section": section,
                 "exp_days": exp_days,
             })
+        elif strict:
+            # No known-food match — drop the line instead of inventing an item.
+            continue
         else:
-            # No match — default to fridge, 7 day expiry
+            # Lenient fallback: keep readable lines as generic fridge items,
+            # but still reject obvious OCR noise.
+            if _looks_like_gibberish(name):
+                continue
+            seen_names.add(name.lower())
             items.append({
                 "name": name,
                 "price": price,
