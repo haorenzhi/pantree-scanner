@@ -67,6 +67,24 @@ TRAY_X, TRAY_Y, TRAY_Z = 90.0, 88.0, 40.0
 TRAY_WALL = 2.0
 TRAY_GAP = 10.0   # 与主体出纸端的间距
 
+# --- 进纸滚轮模组 (Stage 1: 主动轮 + 压紧惰轮 + 支架 + 电机座) ---
+ROLLER_DIA = 20.0     # 主动滚轮直径(匹配固件周长62.8 -> 步进准确)
+ROLLER_LEN = 90.0     # 滚轮长(>票宽80)
+SHAFT_D = 5.0         # NEMA17 D 轴直径
+SHAFT_FLAT = 2.1      # D 轴平面距中心(含公差)
+ORING_POS = 30.0      # O 型圈槽位置(±Y，在纸道内)
+ORING_W = 2.4         # 槽宽
+ORING_DEPTH = 1.5     # 槽深
+IDLER_DIA = 16.0      # 压紧惰轮外径(素管，轴孔Ø8)
+BEARING_ID = 8.0      # 608 内径(惰轮/惰轴用 8mm)
+BRACKET_T = 4.0       # 支架板厚
+BRACKET_H = 45.0      # 支架高
+DRIVE_AXIS_Z = 15.0   # 主动轮轴离支架底高
+NEMA_HOLE = 31.0      # NEMA17 螺孔方阵
+NEMA_BORE = 23.0      # 中心让位
+NEMA_SCREW = 3.2      # M3 孔
+FEED_EXPL_Y = -160.0  # 爆炸展示位置(远离主体，仅方便查看/导出)
+
 # ============================================================
 # 辅助函数
 # ============================================================
@@ -168,6 +186,75 @@ tray = tray.cut(box(TRAY_X - 2 * TRAY_WALL, TRAY_Y - 2 * TRAY_WALL,
                     TRAY_Z - FLOOR, tx, 0, FLOOR))
 add(doc, "Tray", tray)
 
+# ---------- 5) 进纸滚轮模组 (Stage 1) ----------
+# 装配假设：主动轮一端直接装在电机 5mm D 轴上，另一端 Ø5 轴段入支架孔；
+# 惰轮为 Ø16 素管套在 8mm 轴上，轴端可套 608 轴承后落入支架竖槽(浮动下压)。
+def _cylY(r, length, x, z, yc):
+    """轴沿 +Y 的圆柱，轴线过 (x, *, z)，在 Y 上以 yc 居中。"""
+    return Part.makeCylinder(r, length, Vector(x, yc - length / 2.0, z), Vector(0, 1, 0))
+
+# 5a. 主动滚轮：Ø20×90，5mm D 轴孔，2 道 O 型圈槽
+_rx, _rz = -90.0, 20.0
+roller = _cylY(ROLLER_DIA / 2.0, ROLLER_LEN, _rx, _rz, FEED_EXPL_Y)
+_bore = _cylY(SHAFT_D / 2.0 + 0.1, ROLLER_LEN + 2.0, _rx, _rz, FEED_EXPL_Y)
+_slab = Part.makeBox(15, ROLLER_LEN + 4, 30,
+                     Vector(_rx + SHAFT_FLAT, FEED_EXPL_Y - ROLLER_LEN / 2.0 - 2, _rz - 15))
+roller = roller.cut(_bore.cut(_slab))          # D 形轴孔
+for _gy in (FEED_EXPL_Y + ORING_POS, FEED_EXPL_Y - ORING_POS):
+    _outer = _cylY(ROLLER_DIA / 2.0 + 2.0, ORING_W, _rx, _rz, _gy)
+    _inner = _cylY(ROLLER_DIA / 2.0 - ORING_DEPTH, ORING_W + 2.0, _rx, _rz, _gy)
+    roller = roller.cut(_outer.cut(_inner))    # O 型圈槽
+add(doc, "DriveRoller", roller)
+
+# 5b. 压紧惰轮：Ø16 素管 + Ø8 轴孔(套 8mm 轴/608)
+_ix = -40.0
+idler = _cylY(IDLER_DIA / 2.0, ROLLER_LEN, _ix, _rz, FEED_EXPL_Y)
+idler = idler.cut(_cylY(BEARING_ID / 2.0 + 0.15, ROLLER_LEN + 2.0, _ix, _rz, FEED_EXPL_Y))
+add(doc, "IdlerRoller", idler)
+
+# 5c. 滚轮支架(左右各一)：主动轮圆孔 + 惰轮浮动竖槽 + 弹簧挂孔 + 底脚螺孔
+def _make_bracket():
+    plate = Part.makeBox(34, BRACKET_T, BRACKET_H, Vector(-17, -BRACKET_T / 2.0, 0))
+    foot = Part.makeBox(34, 18, BRACKET_T, Vector(-17, BRACKET_T / 2.0, 0))
+    b = plate.fuse(foot)
+    # 主动轮轴孔 Ø8
+    b = b.cut(Part.makeCylinder(4.0, BRACKET_T + 2,
+              Vector(0, -BRACKET_T / 2.0 - 1, DRIVE_AXIS_Z), Vector(0, 1, 0)))
+    # 惰轮浮动竖槽(Ø8 宽，可上下浮动施压)
+    b = b.cut(Part.makeBox(8, BRACKET_T + 2, 14,
+              Vector(-4, -BRACKET_T / 2.0 - 1, DRIVE_AXIS_Z + 6)))
+    b = b.cut(Part.makeCylinder(4.0, BRACKET_T + 2,
+              Vector(0, -BRACKET_T / 2.0 - 1, DRIVE_AXIS_Z + 20), Vector(0, 1, 0)))
+    # 弹簧挂柱孔
+    b = b.cut(Part.makeCylinder(1.5, BRACKET_T + 2,
+              Vector(0, -BRACKET_T / 2.0 - 1, BRACKET_H - 4), Vector(0, 1, 0)))
+    # 底脚螺孔 Ø3.2(竖向穿脚，螺上盖板)
+    for fx in (-12, 12):
+        b = b.cut(Part.makeCylinder(1.6, BRACKET_T + 4, Vector(fx, 10, -1), Vector(0, 0, 1)))
+    return b
+
+_brk = _make_bracket()
+_bL = _brk.copy(); _bL.translate(Vector(20, FEED_EXPL_Y - 60, 0))
+_bR = _brk.copy(); _bR.translate(Vector(20, FEED_EXPL_Y + 60, 0))
+add(doc, "RollerBracket_L", _bL)
+add(doc, "RollerBracket_R", _bR)
+
+# 5d. 电机座：NEMA17 面板(中心让位Ø23 + 4×M3) + 底脚(可换独立件)
+MM_T = 4.0
+_mp = Part.makeBox(50, MM_T, 50, Vector(-25, -MM_T / 2.0, 0))
+_mf = Part.makeBox(50, 18, MM_T, Vector(-25, MM_T / 2.0, 0))
+motor_mount = _mp.fuse(_mf)
+motor_mount = motor_mount.cut(Part.makeCylinder(NEMA_BORE / 2.0, MM_T + 2,
+                             Vector(0, -MM_T / 2.0 - 1, 25), Vector(0, 1, 0)))
+for _dx in (-NEMA_HOLE / 2.0, NEMA_HOLE / 2.0):
+    for _dz in (25 - NEMA_HOLE / 2.0, 25 + NEMA_HOLE / 2.0):
+        motor_mount = motor_mount.cut(Part.makeCylinder(NEMA_SCREW / 2.0, MM_T + 2,
+                                     Vector(_dx, -MM_T / 2.0 - 1, _dz), Vector(0, 1, 0)))
+for _fx in (-18, 18):
+    motor_mount = motor_mount.cut(Part.makeCylinder(1.6, MM_T + 4, Vector(_fx, 10, -1), Vector(0, 0, 1)))
+motor_mount.translate(Vector(95, FEED_EXPL_Y, 0))
+add(doc, "MotorMount", motor_mount)
+
 # ============================================================
 # 收尾
 # ============================================================
@@ -180,6 +267,9 @@ except Exception:
     pass
 
 print("生成完成：Base / Lid / CameraTower / Tray")
+print("       + 进纸模组：DriveRoller / IdlerRoller / RollerBracket_L,R / MotorMount")
 print("台面高 Z=%.1f，镜头工作距离=%.1f mm，立柱高=%.1f mm" %
       (bed_top, WORK_DIST, post_h))
+print("主动轮 Ø%.0f×%.0f(匹配固件周长62.8)，5mm D轴孔 + 2道O型圈槽" %
+      (ROLLER_DIA, ROLLER_LEN))
 print("导出STL：选中零件 → File → Export → STL")
