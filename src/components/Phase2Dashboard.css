@@ -1,0 +1,226 @@
+.phase2-dashboard {
+  width: min(1100px, 94vw);
+  margin: 28px auto 10px;
+  padding: 22px;
+  border-radius: 24px;
+  background: linear-gradient(135deg, #fffaf1 0%, #f4f8e8 100%);
+  box-shadow: 0 18px 45px rgba(68, 77, 30, 0.14);
+  color: #314016;
+}
+
+.phase2-muted {
+  text-align: center;
+  color: #6c7049;
+}
+
+.phase2-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: center;
+  margin-bottom: 18px;
+}
+
+.phase2-header h2 {
+  margin: 0;
+  font-size: clamp(1.4rem, 2.5vw, 2rem);
+}
+
+.phase2-header p {
+  margin: 5px 0 0;
+  color: #65703c;
+}
+
+.phase2-eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #7b8d26 !important;
+}
+
+.phase2-privacy-badge {
+  min-width: 180px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: #26350e;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.phase2-privacy-badge span {
+  font-size: 1.5rem;
+}
+
+.phase2-privacy-badge small {
+  color: #dce9b1;
+}
+
+.phase2-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.phase2-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 16px;
+}
+
+.phase2-metric-card,
+.phase2-panel {
+  border: 1px solid rgba(121, 148, 25, 0.18);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(8px);
+}
+
+.phase2-metric-card {
+  padding: 16px;
+  min-height: 130px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.phase2-metric-card span,
+.phase2-metric-card small,
+.phase2-panel-title p,
+.phase2-risk-item small,
+.phase2-meal small,
+.phase2-ml-card small {
+  color: #687149;
+}
+
+.phase2-metric-card strong {
+  font-size: 1.6rem;
+}
+
+.phase2-panel {
+  padding: 18px;
+}
+
+.phase2-panel-wide {
+  margin-top: 16px;
+}
+
+.phase2-panel-title {
+  margin-bottom: 12px;
+}
+
+.phase2-panel-title h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.phase2-panel-title p {
+  margin: 3px 0 0;
+  font-size: 0.86rem;
+}
+
+.phase2-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.phase2-list li {
+  margin-bottom: 10px;
+}
+
+.phase2-empty {
+  color: #687149;
+  margin: 0;
+}
+
+.phase2-risk-list,
+.phase2-meals,
+.phase2-ml-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.phase2-risk-item,
+.phase2-meal,
+.phase2-ml-card {
+  padding: 12px;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid #eef1df;
+}
+
+.phase2-risk-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.phase2-risk-item p,
+.phase2-meal p,
+.phase2-ml-card p {
+  margin: 4px 0;
+}
+
+.phase2-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.phase2-actions button {
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: #799419;
+  color: #fff;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.phase2-actions button.danger {
+  background: #8a3a1f;
+}
+
+.phase2-action-message {
+  margin: 12px 0 0;
+  font-weight: 600;
+  color: #52620f;
+}
+
+.phase2-pill {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #edf4c8;
+  color: #52620f;
+  font-size: 0.75rem;
+}
+
+.phase2-ml-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+@media (max-width: 900px) {
+  .phase2-header,
+  .phase2-risk-item {
+    flex-direction: column;
+  }
+
+  .phase2-metrics,
+  .phase2-grid,
+  .phase2-ml-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .phase2-privacy-badge {
+    width: 100%;
+  }
+
+  .phase2-actions {
+    flex-direction: row;
+  }
+}

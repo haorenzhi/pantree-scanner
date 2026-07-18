@@ -1,0 +1,10 @@
+- Jumper wires
+- Breadboard
+- Samsung 32GB Micro SD
+- 12V Power Supply
+- Neopixel LED Strip Lights
+- Easy Driver Stepper Motor Driver
+- Stepper Motor
+- Raspberry Pi Camera Module V2
+- Raspberry Pi Model B+ V1.2
+- USB WiFi Dongle (Pi B+ has no built-in WiFi) OR Ethernet cable

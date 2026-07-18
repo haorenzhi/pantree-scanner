@@ -64,3 +64,25 @@ node_modules/
 
 # dotenv environment variables file
 .env
+
+# Tesseract uncompressed language data (decompressed at runtime from .gz)
+bridge-server/lang-data/*.traineddata
+*.traineddata
+
+# Bridge server runtime data
+bridge-server/pantree-data.json
+bridge-server/pantree-events.json
+bridge-server/receipt-uploads/
+bridge-server/local-cache/
+
+# Production build output
+build/
+
+# Xcode user-local state
+*.xcuserstate
+*.xcworkspace/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+
+# Python bytecode cache
+__pycache__/
+*.pyc

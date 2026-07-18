@@ -31,6 +31,8 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
+    "test:phase2": "node bridge-server/phase2/phase2.test.js",
+    "test:ci": "npm run test:phase2 && react-scripts test --watchAll=false",
     "eject": "react-scripts eject"
   },
   "eslintConfig": {

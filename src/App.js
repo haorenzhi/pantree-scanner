@@ -4,8 +4,9 @@ import "bootstrap/dist/css/bootstrap.min.css";
 import DropdownButton from 'react-bootstrap/DropdownButton';
 import Dropdown from 'react-bootstrap/Dropdown';
 import { useData, useUserState, signInWithG, signOutOfG } from "./utilities/firebase.js";
-import { FoodList, Expired, m_notify, notify } from "./food";
-import { AddButton, notification, update } from "./form";
+import { FoodList, Expired, notify } from "./food";
+import { AddButton } from "./form";
+import Phase2Dashboard from "./components/Phase2Dashboard";
 import {
   MainLayout,
   Header,
@@ -140,12 +141,6 @@ export const App = () => {
     }
   }
 
-  const quickadd = () => {
-    const today = new Date().toLocaleString( 'sv', { timeZone: 'America/Chicago' } ).substring(0, 10);
-    update("", "food1", today, today, user, 'fridge')
-  }
-
-
   return (
     <>
       <ToastContainer transition={Slide} />
@@ -183,6 +178,7 @@ export const App = () => {
               <AddButton />
             </div> : ""}
           {!user ? <H2>Sign In To Unlock Your Kitchen</H2> : null}
+          {user ? <Phase2Dashboard /> : null}
           {user ? <FoodList foods={matched} /> : ""}
         </Content>
       </MainLayout>

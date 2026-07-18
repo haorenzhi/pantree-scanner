@@ -62,6 +62,7 @@ body{
 .btn:hover{
   font-size: 17px;
   color: #fff;
+  background: rgb(100, 125, 20);
 }
 
 #out{
