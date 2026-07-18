@@ -87,6 +87,20 @@ Private Const TRAY_Z As Double = 40#
 Private Const TRAY_WALL As Double = 2#
 Private Const TRAY_GAP As Double = 10#     ' Gap from the main body's paper-exit end
 
+' --- Paper-feed roller module (Stage 1) ---
+Private Const ROLLER_DIA As Double = 20#   ' Drive roller diameter (matches firmware circumference 62.8)
+Private Const ROLLER_LEN As Double = 90#   ' Roller length (> receipt width 80)
+Private Const SHAFT_D As Double = 5#       ' NEMA17 D-shaft diameter
+Private Const SHAFT_FLAT As Double = 2.1   ' D-shaft flat distance from center (with tolerance)
+Private Const ORING_POS As Double = 30#    ' O-ring groove position (±Y, inside paper path)
+Private Const ORING_W As Double = 2.4      ' Groove width
+Private Const ORING_DEPTH As Double = 1.5  ' Groove depth
+Private Const IDLER_DIA As Double = 16#    ' Idler roller outer diameter (plain tube, Ø8 bore)
+Private Const BEARING_ID As Double = 8#    ' 608 inner diameter (idler / 8mm axle)
+Private Const BRACKET_T As Double = 4#     ' Bracket plate thickness
+Private Const BRACKET_H As Double = 45#    ' Bracket height
+Private Const DRIVE_AXIS_Z As Double = 15# ' Drive roller axle height above bracket bottom
+
 ' ============================================================
 ' Globals
 ' ============================================================
@@ -107,11 +121,14 @@ Sub main()
     BuildLid
     BuildCameraTower
     BuildTray
+    BuildDriveRoller
+    BuildIdlerRoller
+    BuildRollerBracket "RollerBracket_L"
+    BuildRollerBracket "RollerBracket_R"
 
     MsgBox "Generation complete: Base / Lid / CameraTower / Tray" & vbCrLf & _
-           "Bed height Z=" & Format(OUT_Z + LID_T, "0.0") & _
-           ", lens face Z=" & Format(OUT_Z + LID_T + WORK_DIST, "0.0") & _
-           ", please Ctrl+S each to save."
+           "Paper feed: DriveRoller / IdlerRoller / RollerBracket_L,R" & vbCrLf & _
+           "Please Ctrl+S each to save."
 End Sub
 
 ' ============================================================
@@ -349,4 +366,73 @@ Private Sub BuildTray()
     Set b = Cut(b, MakeBox(TRAY_X - 2 * TRAY_WALL, TRAY_Y - 2 * TRAY_WALL, _
                            TRAY_Z - FLOOR, tx, 0#, FLOOR))
     CommitAsPart b, "Tray"
+End Sub
+
+' ============================================================
+' 5) Drive roller (Ø20x90, axis +Y, 5mm D-bore + 2 O-ring grooves)
+' ============================================================
+Private Sub BuildDriveRoller()
+    StartPart
+    Dim r As Object
+    ' Main roller cylinder, centered on origin, axis +Y
+    Set r = MakeCylAxis(ROLLER_DIA / 2#, ROLLER_LEN, 0#, -ROLLER_LEN / 2#, 0#, 0#, 1#, 0#)
+
+    ' D-shaped shaft bore (Ø5.2 cylinder with a flat cut at SHAFT_FLAT)
+    Dim bore As Object
+    Set bore = MakeCylAxis(SHAFT_D / 2# + 0.1, ROLLER_LEN + 2#, 0#, -ROLLER_LEN / 2# - 1#, 0#, 0#, 1#, 0#)
+    Set bore = Cut(bore, MakeBoxCorner(SHAFT_FLAT, -ROLLER_LEN / 2# - 2#, -15#, 15#, ROLLER_LEN + 4#, 30#))
+    Set r = Cut(r, bore)
+
+    ' Two O-ring grooves at ±ORING_POS
+    Dim gy As Variant, groove As Object
+    For Each gy In Array(ORING_POS, -ORING_POS)
+        Set groove = MakeCylAxis(ROLLER_DIA / 2# + 2#, ORING_W, 0#, CDbl(gy) - ORING_W / 2#, 0#, 0#, 1#, 0#)
+        Set groove = Cut(groove, MakeCylAxis(ROLLER_DIA / 2# - ORING_DEPTH, ORING_W + 2#, _
+                                             0#, CDbl(gy) - (ORING_W + 2#) / 2#, 0#, 0#, 1#, 0#))
+        Set r = Cut(r, groove)
+    Next
+
+    CommitAsPart r, "DriveRoller"
+End Sub
+
+' ============================================================
+' 6) Idler roller (Ø16x90 plain tube, Ø8 bore for 608 / 8mm axle)
+' ============================================================
+Private Sub BuildIdlerRoller()
+    StartPart
+    Dim r As Object
+    Set r = MakeCylAxis(IDLER_DIA / 2#, ROLLER_LEN, 0#, -ROLLER_LEN / 2#, 0#, 0#, 1#, 0#)
+    Set r = Cut(r, MakeCylAxis(BEARING_ID / 2# + 0.15, ROLLER_LEN + 2#, 0#, -ROLLER_LEN / 2# - 1#, 0#, 0#, 1#, 0#))
+    CommitAsPart r, "IdlerRoller"
+End Sub
+
+' ============================================================
+' 7) Roller bracket (drive axle hole + floating idler slot + spring post + feet)
+'    L and R are geometrically identical.
+' ============================================================
+Private Sub BuildRollerBracket(ByVal nm As String)
+    StartPart
+    Dim b As Object
+    ' Upright plate: X[-17,17], Y[-T/2,+T/2], Z[0,BRACKET_H]
+    Set b = MakeBoxCorner(-17#, -BRACKET_T / 2#, 0#, 34#, BRACKET_T, BRACKET_H)
+    ' Foot: X[-17,17], Y[T/2, T/2+18], Z[0,T]
+    Set b = Fuse(b, MakeBoxCorner(-17#, BRACKET_T / 2#, 0#, 34#, 18#, BRACKET_T))
+
+    ' Drive roller axle hole Ø8 (axis +Y) at Z=DRIVE_AXIS_Z
+    Set b = Cut(b, MakeCylAxis(4#, BRACKET_T + 2#, 0#, -BRACKET_T / 2# - 1#, DRIVE_AXIS_Z, 0#, 1#, 0#))
+
+    ' Idler floating slot (Ø8 wide vertical slot with rounded top, lets idler press down)
+    Set b = Cut(b, MakeBoxCorner(-4#, -BRACKET_T / 2# - 1#, DRIVE_AXIS_Z + 6#, 8#, BRACKET_T + 2#, 14#))
+    Set b = Cut(b, MakeCylAxis(4#, BRACKET_T + 2#, 0#, -BRACKET_T / 2# - 1#, DRIVE_AXIS_Z + 20#, 0#, 1#, 0#))
+
+    ' Spring post hole Ø3
+    Set b = Cut(b, MakeCylAxis(1.5, BRACKET_T + 2#, 0#, -BRACKET_T / 2# - 1#, BRACKET_H - 4#, 0#, 1#, 0#))
+
+    ' Foot screw holes Ø3.2 (vertical, through the foot)
+    Dim fx As Variant
+    For Each fx In Array(-12#, 12#)
+        Set b = Cut(b, MakeCylAxis(1.6, BRACKET_T + 4#, CDbl(fx), 10#, -1#, 0#, 0#, 1#))
+    Next
+
+    CommitAsPart b, nm
 End Sub
